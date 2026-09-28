@@ -30,8 +30,18 @@ app.UseHttpsRedirection();
 
 var transacciones = app.MapGroup("/transacciones");
 
+static IResult? ValidarMonto(decimal monto) =>
+    monto <= 0
+        ? Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["Monto"] = ["El monto debe ser mayor a cero."]
+        })
+        : null;
+
 transacciones.MapPost("/", async (Transaccion transaccion, GestorGastosDbContext db) =>
 {
+    if (ValidarMonto(transaccion.Monto) is { } error) return error;
+
     transaccion.Id = Guid.NewGuid();
     db.Transacciones.Add(transaccion);
     await db.SaveChangesAsync();
@@ -48,6 +58,8 @@ transacciones.MapGet("/{id:guid}", async (Guid id, GestorGastosDbContext db) =>
 
 transacciones.MapPut("/{id:guid}", async (Guid id, Transaccion input, GestorGastosDbContext db) =>
 {
+    if (ValidarMonto(input.Monto) is { } error) return error;
+
     var transaccion = await db.Transacciones.FindAsync(id);
     if (transaccion is null) return Results.NotFound();
 

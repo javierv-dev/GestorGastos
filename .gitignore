@@ -483,3 +483,5 @@ $RECYCLE.BIN/
 
 # Base de datos SQLite local
 gastos.db
+gastos.db-shm
+gastos.db-wal
