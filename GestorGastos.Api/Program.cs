@@ -58,6 +58,21 @@ transacciones.MapGet("/saldo", async (GestorGastosDbContext db) =>
     return Results.Ok(new { saldo });
 });
 
+transacciones.MapGet("/resumen", async (GestorGastosDbContext db) =>
+{
+    var resumen = await db.Transacciones
+        .GroupBy(t => t.Categoria)
+        .Select(g => new
+        {
+            categoria = g.Key,
+            totalIngresos = g.Sum(t => t.Tipo == TipoTransaccion.Ingreso ? t.Monto : 0),
+            totalEgresos = g.Sum(t => t.Tipo == TipoTransaccion.Egreso ? t.Monto : 0)
+        })
+        .OrderBy(r => r.categoria)
+        .ToListAsync();
+    return Results.Ok(resumen);
+});
+
 transacciones.MapGet("/{id:guid}", async (Guid id, GestorGastosDbContext db) =>
     await db.Transacciones.FindAsync(id) is { } transaccion
         ? Results.Ok(transaccion)
