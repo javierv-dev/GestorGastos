@@ -48,8 +48,20 @@ transacciones.MapPost("/", async (Transaccion transaccion, GestorGastosDbContext
     return Results.Created($"/transacciones/{transaccion.Id}", transaccion);
 });
 
-transacciones.MapGet("/", async (GestorGastosDbContext db) =>
-    await db.Transacciones.ToListAsync());
+transacciones.MapGet("/", async (
+    DateTime? desde,
+    DateTime? hasta,
+    CategoriaTransaccion? categoria,
+    GestorGastosDbContext db) =>
+{
+    var query = db.Transacciones.AsQueryable();
+
+    if (desde is not null) query = query.Where(t => t.Fecha >= desde.Value.Date);
+    if (hasta is not null) query = query.Where(t => t.Fecha < hasta.Value.Date.AddDays(1));
+    if (categoria is not null) query = query.Where(t => t.Categoria == categoria);
+
+    return await query.ToListAsync();
+});
 
 transacciones.MapGet("/saldo", async (GestorGastosDbContext db) =>
 {
