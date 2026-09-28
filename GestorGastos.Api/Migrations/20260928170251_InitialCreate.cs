@@ -12,19 +12,19 @@ namespace GestorGastos.Api.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
-                name: "Expenses",
+                name: "Transacciones",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Description = table.Column<string>(type: "TEXT", nullable: false),
-                    Amount = table.Column<decimal>(type: "TEXT", nullable: false),
-                    Date = table.Column<DateOnly>(type: "TEXT", nullable: false),
-                    Category = table.Column<string>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    Descripcion = table.Column<string>(type: "TEXT", nullable: false),
+                    Monto = table.Column<decimal>(type: "TEXT", nullable: false),
+                    Tipo = table.Column<int>(type: "INTEGER", nullable: false),
+                    Categoria = table.Column<int>(type: "INTEGER", nullable: false),
+                    Fecha = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Expenses", x => x.Id);
+                    table.PrimaryKey("PK_Transacciones", x => x.Id);
                 });
         }
 
@@ -32,7 +32,7 @@ namespace GestorGastos.Api.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "Expenses");
+                name: "Transacciones");
         }
     }
 }

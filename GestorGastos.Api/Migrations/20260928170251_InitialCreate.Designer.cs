@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace GestorGastos.Api.Migrations
 {
     [DbContext(typeof(GestorGastosDbContext))]
-    [Migration("20260928163059_InitialCreate")]
+    [Migration("20260928170251_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -20,29 +20,31 @@ namespace GestorGastos.Api.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
-            modelBuilder.Entity("GestorGastos.Api.Models.Expense", b =>
+            modelBuilder.Entity("GestorGastos.Api.Models.Transaccion", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Categoria")
                         .HasColumnType("INTEGER");
 
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Category")
+                    b.Property<string>("Descripcion")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<DateOnly>("Date")
+                    b.Property<DateTime>("Fecha")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Description")
-                        .IsRequired()
+                    b.Property<decimal>("Monto")
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
-                    b.ToTable("Expenses");
+                    b.ToTable("Transacciones");
                 });
 #pragma warning restore 612, 618
         }
