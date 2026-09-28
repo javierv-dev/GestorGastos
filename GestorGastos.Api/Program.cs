@@ -1,4 +1,6 @@
+using System.Text.Json.Serialization;
 using GestorGastos.Api.Data;
+using GestorGastos.Api.Models;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -7,6 +9,10 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddDbContext<GestorGastosDbContext>(opt => opt.UseSqlite("Data Source=gastos.db"));
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 
 var app = builder.Build();
 
@@ -22,28 +28,47 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+var transacciones = app.MapGroup("/transacciones");
 
-app.MapGet("/weatherforecast", () =>
+transacciones.MapPost("/", async (Transaccion transaccion, GestorGastosDbContext db) =>
 {
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+    transaccion.Id = Guid.NewGuid();
+    db.Transacciones.Add(transaccion);
+    await db.SaveChangesAsync();
+    return Results.Created($"/transacciones/{transaccion.Id}", transaccion);
+});
+
+transacciones.MapGet("/", async (GestorGastosDbContext db) =>
+    await db.Transacciones.ToListAsync());
+
+transacciones.MapGet("/{id:guid}", async (Guid id, GestorGastosDbContext db) =>
+    await db.Transacciones.FindAsync(id) is { } transaccion
+        ? Results.Ok(transaccion)
+        : Results.NotFound());
+
+transacciones.MapPut("/{id:guid}", async (Guid id, Transaccion input, GestorGastosDbContext db) =>
+{
+    var transaccion = await db.Transacciones.FindAsync(id);
+    if (transaccion is null) return Results.NotFound();
+
+    transaccion.Descripcion = input.Descripcion;
+    transaccion.Monto = input.Monto;
+    transaccion.Tipo = input.Tipo;
+    transaccion.Categoria = input.Categoria;
+    transaccion.Fecha = input.Fecha;
+
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+});
+
+transacciones.MapDelete("/{id:guid}", async (Guid id, GestorGastosDbContext db) =>
+{
+    var transaccion = await db.Transacciones.FindAsync(id);
+    if (transaccion is null) return Results.NotFound();
+
+    db.Transacciones.Remove(transaccion);
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+});
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
