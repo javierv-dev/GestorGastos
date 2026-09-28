@@ -51,6 +51,13 @@ transacciones.MapPost("/", async (Transaccion transaccion, GestorGastosDbContext
 transacciones.MapGet("/", async (GestorGastosDbContext db) =>
     await db.Transacciones.ToListAsync());
 
+transacciones.MapGet("/saldo", async (GestorGastosDbContext db) =>
+{
+    var saldo = await db.Transacciones
+        .SumAsync(t => t.Tipo == TipoTransaccion.Ingreso ? t.Monto : -t.Monto);
+    return Results.Ok(new { saldo });
+});
+
 transacciones.MapGet("/{id:guid}", async (Guid id, GestorGastosDbContext db) =>
     await db.Transacciones.FindAsync(id) is { } transaccion
         ? Results.Ok(transaccion)
