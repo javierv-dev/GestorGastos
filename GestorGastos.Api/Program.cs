@@ -30,6 +30,8 @@ app.UseHttpsRedirection();
 
 var transacciones = app.MapGroup("/transacciones");
 
+const decimal UmbralSaldoBajo = 100m;
+
 static IResult? ValidarMonto(decimal monto) =>
     monto <= 0
         ? Results.ValidationProblem(new Dictionary<string, string[]>
@@ -45,7 +47,26 @@ transacciones.MapPost("/", async (Transaccion transaccion, GestorGastosDbContext
     transaccion.Id = Guid.NewGuid();
     db.Transacciones.Add(transaccion);
     await db.SaveChangesAsync();
-    return Results.Created($"/transacciones/{transaccion.Id}", transaccion);
+
+    var saldoActual = await db.Transacciones
+        .SumAsync(t => t.Tipo == TipoTransaccion.Ingreso ? t.Monto : -t.Monto);
+
+    var saldoBajo = transaccion switch
+    {
+        { Tipo: TipoTransaccion.Egreso } when saldoActual < UmbralSaldoBajo => true,
+        _ => false
+    };
+
+    return Results.Created($"/transacciones/{transaccion.Id}", new
+    {
+        transaccion.Id,
+        transaccion.Descripcion,
+        transaccion.Monto,
+        transaccion.Tipo,
+        transaccion.Categoria,
+        transaccion.Fecha,
+        saldoBajo
+    });
 });
 
 transacciones.MapGet("/", async (
