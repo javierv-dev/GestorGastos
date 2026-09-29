@@ -9,9 +9,17 @@ public record TransaccionResponse(
     TipoTransaccion Tipo,
     CategoriaTransaccion Categoria,
     DateTime Fecha,
-    bool SaldoBajo = false)
+    bool SaldoBajo = false
+)
 {
     public static TransaccionResponse Desde(Transaccion transaccion, bool saldoBajo = false) =>
-        new(transaccion.Id, transaccion.Descripcion, transaccion.Monto, transaccion.Tipo,
-            transaccion.Categoria, transaccion.Fecha, saldoBajo);
+        new(
+            transaccion.Id,
+            transaccion.Descripcion,
+            transaccion.Monto,
+            transaccion.Tipo,
+            transaccion.Categoria,
+            transaccion.Fecha,
+            saldoBajo
+        );
 }

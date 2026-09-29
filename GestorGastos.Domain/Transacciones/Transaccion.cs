@@ -3,7 +3,7 @@ namespace GestorGastos.Domain.Transacciones;
 public enum TipoTransaccion
 {
     Ingreso,
-    Egreso
+    Egreso,
 }
 
 public enum CategoriaTransaccion
@@ -16,7 +16,7 @@ public enum CategoriaTransaccion
     Entretenimiento,
     Educacion,
     Salario,
-    Otros
+    Otros,
 }
 
 public class Transaccion
@@ -32,23 +32,23 @@ public class Transaccion
     public DateTime Fecha { get; private set; }
 
     public static Transaccion Crear(
-        string descripcion, decimal monto, TipoTransaccion tipo,
-        CategoriaTransaccion? categoria, DateTime fecha)
+        string descripcion,
+        decimal monto,
+        TipoTransaccion tipo,
+        CategoriaTransaccion? categoria,
+        DateTime fecha
+    )
     {
         var transaccion = new Transaccion { Id = Guid.NewGuid() };
         transaccion.Aplicar(descripcion, monto, tipo, categoria, fecha);
         return transaccion;
     }
 
-    public void Actualizar(
-        string descripcion, decimal monto, TipoTransaccion tipo,
-        CategoriaTransaccion? categoria, DateTime fecha) =>
+    public void Actualizar(string descripcion, decimal monto, TipoTransaccion tipo, CategoriaTransaccion? categoria, DateTime fecha) =>
         Aplicar(descripcion, monto, tipo, categoria, fecha);
 
     // Valida todo antes de asignar: la entidad nunca queda a medio cambiar.
-    private void Aplicar(
-        string descripcion, decimal monto, TipoTransaccion tipo,
-        CategoriaTransaccion? categoria, DateTime fecha)
+    private void Aplicar(string descripcion, decimal monto, TipoTransaccion tipo, CategoriaTransaccion? categoria, DateTime fecha)
     {
         if (monto <= 0)
             throw new DomainException(nameof(Monto), "El monto debe ser mayor a cero.");

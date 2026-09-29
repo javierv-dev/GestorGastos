@@ -9,7 +9,8 @@ public record CrearTransaccionCommand(
     decimal Monto,
     TipoTransaccion Tipo,
     CategoriaTransaccion? Categoria,
-    DateTime Fecha) : IRequest<CrearTransaccionResultado>;
+    DateTime Fecha
+) : IRequest<CrearTransaccionResultado>;
 
 public record CrearTransaccionResultado(Transaccion Transaccion, bool SaldoBajo);
 
@@ -18,11 +19,9 @@ public class CrearTransaccionHandler(ITransaccionRepository repositorio, IUnitOf
 {
     private const decimal UmbralSaldoBajo = 100m;
 
-    public async Task<CrearTransaccionResultado> Handle(
-        CrearTransaccionCommand command, CancellationToken cancellationToken)
+    public async Task<CrearTransaccionResultado> Handle(CrearTransaccionCommand command, CancellationToken cancellationToken)
     {
-        var transaccion = Transaccion.Crear(
-            command.Descripcion, command.Monto, command.Tipo, command.Categoria, command.Fecha);
+        var transaccion = Transaccion.Crear(command.Descripcion, command.Monto, command.Tipo, command.Categoria, command.Fecha);
 
         repositorio.Agregar(transaccion);
         await unitOfWork.GuardarCambiosAsync(cancellationToken);
@@ -32,7 +31,7 @@ public class CrearTransaccionHandler(ITransaccionRepository repositorio, IUnitOf
         var saldoBajo = transaccion switch
         {
             { Tipo: TipoTransaccion.Egreso } when saldoActual < UmbralSaldoBajo => true,
-            _ => false
+            _ => false,
         };
 
         return new CrearTransaccionResultado(transaccion, saldoBajo);

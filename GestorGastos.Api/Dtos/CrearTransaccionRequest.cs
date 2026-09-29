@@ -7,4 +7,5 @@ public record CrearTransaccionRequest(
     decimal Monto,
     TipoTransaccion Tipo,
     CategoriaTransaccion? Categoria,
-    DateTime Fecha);
+    DateTime Fecha
+);

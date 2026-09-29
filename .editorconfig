@@ -1,0 +1,54 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 140
+
+[*.{csproj,props,targets,slnx,xml,config,json}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.cs]
+# Usings: System primero, sin líneas en blanco entre grupos.
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+
+# Estilo
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_style_prefer_primary_constructors = true:suggestion
+dotnet_diagnostic.IDE0005.severity = warning
+
+# Nombres: interfaces con prefijo I y campos privados en _camelCase.
+dotnet_naming_symbols.interfaces.applicable_kinds = interface
+dotnet_naming_style.prefijo_i.required_prefix = I
+dotnet_naming_style.prefijo_i.capitalization = pascal_case
+dotnet_naming_rule.interfaces_con_i.symbols = interfaces
+dotnet_naming_rule.interfaces_con_i.style = prefijo_i
+dotnet_naming_rule.interfaces_con_i.severity = warning
+
+dotnet_naming_symbols.constantes.applicable_kinds = field
+dotnet_naming_symbols.constantes.required_modifiers = const
+dotnet_naming_style.pascal.capitalization = pascal_case
+dotnet_naming_rule.constantes_en_pascal.symbols = constantes
+dotnet_naming_rule.constantes_en_pascal.style = pascal
+dotnet_naming_rule.constantes_en_pascal.severity = warning
+
+dotnet_naming_symbols.campos_privados.applicable_kinds = field
+dotnet_naming_symbols.campos_privados.applicable_accessibilities = private
+dotnet_naming_style.guion_bajo_camel.required_prefix = _
+dotnet_naming_style.guion_bajo_camel.capitalization = camel_case
+dotnet_naming_rule.campos_privados_con_guion_bajo.symbols = campos_privados
+dotnet_naming_rule.campos_privados_con_guion_bajo.style = guion_bajo_camel
+dotnet_naming_rule.campos_privados_con_guion_bajo.severity = warning
+
+# Código generado por EF Core: no se formatea ni se analiza.
+[**/Migrations/*.cs]
+generated_code = true
+dotnet_analyzer_diagnostic.severity = none

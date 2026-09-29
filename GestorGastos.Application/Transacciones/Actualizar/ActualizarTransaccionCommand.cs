@@ -11,7 +11,8 @@ public record ActualizarTransaccionCommand(
     decimal Monto,
     TipoTransaccion Tipo,
     CategoriaTransaccion? Categoria,
-    DateTime Fecha) : IRequest<bool>;
+    DateTime Fecha
+) : IRequest<bool>;
 
 public class ActualizarTransaccionHandler(ITransaccionRepository repositorio, IUnitOfWork unitOfWork)
     : IRequestHandler<ActualizarTransaccionCommand, bool>
@@ -19,10 +20,10 @@ public class ActualizarTransaccionHandler(ITransaccionRepository repositorio, IU
     public async Task<bool> Handle(ActualizarTransaccionCommand command, CancellationToken cancellationToken)
     {
         var transaccion = await repositorio.ObtenerPorIdAsync(command.Id, cancellationToken);
-        if (transaccion is null) return false;
+        if (transaccion is null)
+            return false;
 
-        transaccion.Actualizar(
-            command.Descripcion, command.Monto, command.Tipo, command.Categoria, command.Fecha);
+        transaccion.Actualizar(command.Descripcion, command.Monto, command.Tipo, command.Categoria, command.Fecha);
 
         await unitOfWork.GuardarCambiosAsync(cancellationToken);
         return true;

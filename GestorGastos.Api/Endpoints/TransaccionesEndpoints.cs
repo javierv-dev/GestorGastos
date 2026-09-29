@@ -31,12 +31,14 @@ public static class TransaccionesEndpoints
     {
         try
         {
-            var resultado = await sender.Send(new CrearTransaccionCommand(
-                request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha));
+            var resultado = await sender.Send(
+                new CrearTransaccionCommand(request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha)
+            );
 
             return Results.Created(
                 $"/transacciones/{resultado.Transaccion.Id}",
-                TransaccionResponse.Desde(resultado.Transaccion, resultado.SaldoBajo));
+                TransaccionResponse.Desde(resultado.Transaccion, resultado.SaldoBajo)
+            );
         }
         catch (DomainException ex)
         {
@@ -45,7 +47,11 @@ public static class TransaccionesEndpoints
     }
 
     private static async Task<IResult> ListarTransacciones(
-        DateTime? desde, DateTime? hasta, CategoriaTransaccion? categoria, ISender sender)
+        DateTime? desde,
+        DateTime? hasta,
+        CategoriaTransaccion? categoria,
+        ISender sender
+    )
     {
         var transacciones = await sender.Send(new ListarTransaccionesQuery(desde, hasta, categoria));
         return Results.Ok(transacciones.Select(t => TransaccionResponse.Desde(t)));
@@ -54,21 +60,20 @@ public static class TransaccionesEndpoints
     private static async Task<IResult> ObtenerSaldo(ISender sender) =>
         Results.Ok(new { saldo = await sender.Send(new ObtenerSaldoQuery()) });
 
-    private static async Task<IResult> ObtenerResumen(ISender sender) =>
-        Results.Ok(await sender.Send(new ObtenerResumenQuery()));
+    private static async Task<IResult> ObtenerResumen(ISender sender) => Results.Ok(await sender.Send(new ObtenerResumenQuery()));
 
     private static async Task<IResult> ObtenerPorId(Guid id, ISender sender) =>
         await sender.Send(new ObtenerTransaccionPorIdQuery(id)) is { } transaccion
             ? Results.Ok(TransaccionResponse.Desde(transaccion))
             : Results.NotFound();
 
-    private static async Task<IResult> ActualizarTransaccion(
-        Guid id, CrearTransaccionRequest request, ISender sender)
+    private static async Task<IResult> ActualizarTransaccion(Guid id, CrearTransaccionRequest request, ISender sender)
     {
         try
         {
-            var encontrada = await sender.Send(new ActualizarTransaccionCommand(
-                id, request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha));
+            var encontrada = await sender.Send(
+                new ActualizarTransaccionCommand(id, request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha)
+            );
 
             return encontrada ? Results.NoContent() : Results.NotFound();
         }
