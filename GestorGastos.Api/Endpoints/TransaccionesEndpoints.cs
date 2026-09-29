@@ -1,15 +1,19 @@
 using GestorGastos.Api.Dtos;
-using GestorGastos.Application.Abstractions;
-using GestorGastos.Application.Transacciones;
+using GestorGastos.Application.Transacciones.Actualizar;
+using GestorGastos.Application.Transacciones.Crear;
+using GestorGastos.Application.Transacciones.Eliminar;
+using GestorGastos.Application.Transacciones.Listar;
+using GestorGastos.Application.Transacciones.ObtenerPorId;
+using GestorGastos.Application.Transacciones.ObtenerResumen;
+using GestorGastos.Application.Transacciones.ObtenerSaldo;
 using GestorGastos.Domain;
 using GestorGastos.Domain.Transacciones;
+using MediatR;
 
 namespace GestorGastos.Api.Endpoints;
 
 public static class TransaccionesEndpoints
 {
-    private const decimal UmbralSaldoBajo = 100m;
-
     public static void MapTransaccionesEndpoints(this WebApplication app)
     {
         var transacciones = app.MapGroup("/transacciones");
@@ -23,87 +27,59 @@ public static class TransaccionesEndpoints
         transacciones.MapDelete("/{id:guid}", EliminarTransaccion);
     }
 
-    private static async Task<IResult> CrearTransaccion(
-        CrearTransaccionRequest request, ITransaccionRepository repositorio, IUnitOfWork unitOfWork)
+    private static async Task<IResult> CrearTransaccion(CrearTransaccionRequest request, ISender sender)
     {
-        Transaccion transaccion;
         try
         {
-            transaccion = Transaccion.Crear(
-                request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha);
+            var resultado = await sender.Send(new CrearTransaccionCommand(
+                request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha));
+
+            return Results.Created(
+                $"/transacciones/{resultado.Transaccion.Id}",
+                TransaccionResponse.Desde(resultado.Transaccion, resultado.SaldoBajo));
         }
         catch (DomainException ex)
         {
             return ProblemaDeDominio(ex);
         }
-
-        repositorio.Agregar(transaccion);
-        await unitOfWork.GuardarCambiosAsync();
-
-        var saldoActual = await repositorio.ObtenerSaldoAsync();
-
-        var saldoBajo = transaccion switch
-        {
-            { Tipo: TipoTransaccion.Egreso } when saldoActual < UmbralSaldoBajo => true,
-            _ => false
-        };
-
-        return Results.Created(
-            $"/transacciones/{transaccion.Id}",
-            TransaccionResponse.Desde(transaccion, saldoBajo));
     }
 
     private static async Task<IResult> ListarTransacciones(
-        DateTime? desde, DateTime? hasta, CategoriaTransaccion? categoria, ITransaccionRepository repositorio)
+        DateTime? desde, DateTime? hasta, CategoriaTransaccion? categoria, ISender sender)
     {
-        var transacciones = await repositorio.ListarAsync(desde, hasta, categoria);
+        var transacciones = await sender.Send(new ListarTransaccionesQuery(desde, hasta, categoria));
         return Results.Ok(transacciones.Select(t => TransaccionResponse.Desde(t)));
     }
 
-    private static async Task<IResult> ObtenerSaldo(ITransaccionRepository repositorio)
-    {
-        var saldo = await repositorio.ObtenerSaldoAsync();
-        return Results.Ok(new { saldo });
-    }
+    private static async Task<IResult> ObtenerSaldo(ISender sender) =>
+        Results.Ok(new { saldo = await sender.Send(new ObtenerSaldoQuery()) });
 
-    private static async Task<IResult> ObtenerResumen(ITransaccionRepository repositorio) =>
-        Results.Ok(await repositorio.ObtenerResumenPorCategoriaAsync());
+    private static async Task<IResult> ObtenerResumen(ISender sender) =>
+        Results.Ok(await sender.Send(new ObtenerResumenQuery()));
 
-    private static async Task<IResult> ObtenerPorId(Guid id, ITransaccionRepository repositorio) =>
-        await repositorio.ObtenerPorIdAsync(id) is { } transaccion
+    private static async Task<IResult> ObtenerPorId(Guid id, ISender sender) =>
+        await sender.Send(new ObtenerTransaccionPorIdQuery(id)) is { } transaccion
             ? Results.Ok(TransaccionResponse.Desde(transaccion))
             : Results.NotFound();
 
     private static async Task<IResult> ActualizarTransaccion(
-        Guid id, CrearTransaccionRequest request, ITransaccionRepository repositorio, IUnitOfWork unitOfWork)
+        Guid id, CrearTransaccionRequest request, ISender sender)
     {
-        var transaccion = await repositorio.ObtenerPorIdAsync(id);
-        if (transaccion is null) return Results.NotFound();
-
         try
         {
-            transaccion.Actualizar(
-                request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha);
+            var encontrada = await sender.Send(new ActualizarTransaccionCommand(
+                id, request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha));
+
+            return encontrada ? Results.NoContent() : Results.NotFound();
         }
         catch (DomainException ex)
         {
             return ProblemaDeDominio(ex);
         }
-
-        await unitOfWork.GuardarCambiosAsync();
-        return Results.NoContent();
     }
 
-    private static async Task<IResult> EliminarTransaccion(
-        Guid id, ITransaccionRepository repositorio, IUnitOfWork unitOfWork)
-    {
-        var transaccion = await repositorio.ObtenerPorIdAsync(id);
-        if (transaccion is null) return Results.NotFound();
-
-        repositorio.Eliminar(transaccion);
-        await unitOfWork.GuardarCambiosAsync();
-        return Results.NoContent();
-    }
+    private static async Task<IResult> EliminarTransaccion(Guid id, ISender sender) =>
+        await sender.Send(new EliminarTransaccionCommand(id)) ? Results.NoContent() : Results.NotFound();
 
     private static IResult ProblemaDeDominio(DomainException ex) =>
         Results.ValidationProblem(new Dictionary<string, string[]> { [ex.Campo] = [ex.Message] });
