@@ -1,4 +1,4 @@
-using GestorGastos.Api.Models;
+using GestorGastos.Domain.Transacciones;
 
 namespace GestorGastos.Api.Dtos;
 

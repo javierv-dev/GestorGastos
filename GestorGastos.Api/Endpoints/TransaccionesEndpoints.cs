@@ -1,6 +1,6 @@
-using GestorGastos.Api.Data;
+using GestorGastos.Infrastructure.Persistence;
 using GestorGastos.Api.Dtos;
-using GestorGastos.Api.Models;
+using GestorGastos.Domain.Transacciones;
 using Microsoft.EntityFrameworkCore;
 
 namespace GestorGastos.Api.Endpoints;

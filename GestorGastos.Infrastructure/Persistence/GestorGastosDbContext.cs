@@ -1,7 +1,7 @@
-using GestorGastos.Api.Models;
+using GestorGastos.Domain.Transacciones;
 using Microsoft.EntityFrameworkCore;
 
-namespace GestorGastos.Api.Data;
+namespace GestorGastos.Infrastructure.Persistence;
 
 public class GestorGastosDbContext(DbContextOptions<GestorGastosDbContext> options) : DbContext(options)
 {

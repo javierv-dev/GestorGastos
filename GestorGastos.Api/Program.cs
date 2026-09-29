@@ -1,14 +1,13 @@
 using System.Text.Json.Serialization;
-using GestorGastos.Api.Data;
 using GestorGastos.Api.Endpoints;
-using Microsoft.EntityFrameworkCore;
+using GestorGastos.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
-builder.Services.AddDbContext<GestorGastosDbContext>(opt => opt.UseSqlite("Data Source=gastos.db"));
+builder.Services.AddInfrastructure();
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());

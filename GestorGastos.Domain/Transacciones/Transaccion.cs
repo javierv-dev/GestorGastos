@@ -1,4 +1,4 @@
-namespace GestorGastos.Api.Models;
+namespace GestorGastos.Domain.Transacciones;
 
 public enum TipoTransaccion
 {

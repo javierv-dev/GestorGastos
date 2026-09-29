@@ -485,3 +485,6 @@ $RECYCLE.BIN/
 gastos.db
 gastos.db-shm
 gastos.db-wal
+
+# Narraciones
+narraciones/
