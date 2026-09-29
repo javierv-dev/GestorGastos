@@ -1,8 +1,8 @@
-using GestorGastos.Infrastructure.Persistence;
 using GestorGastos.Api.Dtos;
+using GestorGastos.Application.Abstractions;
+using GestorGastos.Application.Transacciones;
 using GestorGastos.Domain;
 using GestorGastos.Domain.Transacciones;
-using Microsoft.EntityFrameworkCore;
 
 namespace GestorGastos.Api.Endpoints;
 
@@ -23,7 +23,8 @@ public static class TransaccionesEndpoints
         transacciones.MapDelete("/{id:guid}", EliminarTransaccion);
     }
 
-    private static async Task<IResult> CrearTransaccion(CrearTransaccionRequest request, GestorGastosDbContext db)
+    private static async Task<IResult> CrearTransaccion(
+        CrearTransaccionRequest request, ITransaccionRepository repositorio, IUnitOfWork unitOfWork)
     {
         Transaccion transaccion;
         try
@@ -36,11 +37,10 @@ public static class TransaccionesEndpoints
             return ProblemaDeDominio(ex);
         }
 
-        db.Transacciones.Add(transaccion);
-        await db.SaveChangesAsync();
+        repositorio.Agregar(transaccion);
+        await unitOfWork.GuardarCambiosAsync();
 
-        var saldoActual = await db.Transacciones
-            .SumAsync(t => t.Tipo == TipoTransaccion.Ingreso ? t.Monto : -t.Monto);
+        var saldoActual = await repositorio.ObtenerSaldoAsync();
 
         var saldoBajo = transaccion switch
         {
@@ -54,49 +54,30 @@ public static class TransaccionesEndpoints
     }
 
     private static async Task<IResult> ListarTransacciones(
-        DateTime? desde, DateTime? hasta, CategoriaTransaccion? categoria, GestorGastosDbContext db)
+        DateTime? desde, DateTime? hasta, CategoriaTransaccion? categoria, ITransaccionRepository repositorio)
     {
-        var query = db.Transacciones.AsQueryable();
-
-        if (desde is not null) query = query.Where(t => t.Fecha >= desde.Value.Date);
-        if (hasta is not null) query = query.Where(t => t.Fecha < hasta.Value.Date.AddDays(1));
-        if (categoria is not null) query = query.Where(t => t.Categoria == categoria);
-
-        var transacciones = await query.ToListAsync();
+        var transacciones = await repositorio.ListarAsync(desde, hasta, categoria);
         return Results.Ok(transacciones.Select(t => TransaccionResponse.Desde(t)));
     }
 
-    private static async Task<IResult> ObtenerSaldo(GestorGastosDbContext db)
+    private static async Task<IResult> ObtenerSaldo(ITransaccionRepository repositorio)
     {
-        var saldo = await db.Transacciones
-            .SumAsync(t => t.Tipo == TipoTransaccion.Ingreso ? t.Monto : -t.Monto);
+        var saldo = await repositorio.ObtenerSaldoAsync();
         return Results.Ok(new { saldo });
     }
 
-    private static async Task<IResult> ObtenerResumen(GestorGastosDbContext db)
-    {
-        var resumen = await db.Transacciones
-            .GroupBy(t => t.Categoria)
-            .Select(g => new
-            {
-                categoria = g.Key,
-                totalIngresos = g.Sum(t => t.Tipo == TipoTransaccion.Ingreso ? t.Monto : 0),
-                totalEgresos = g.Sum(t => t.Tipo == TipoTransaccion.Egreso ? t.Monto : 0)
-            })
-            .OrderBy(r => r.categoria)
-            .ToListAsync();
-        return Results.Ok(resumen);
-    }
+    private static async Task<IResult> ObtenerResumen(ITransaccionRepository repositorio) =>
+        Results.Ok(await repositorio.ObtenerResumenPorCategoriaAsync());
 
-    private static async Task<IResult> ObtenerPorId(Guid id, GestorGastosDbContext db) =>
-        await db.Transacciones.FindAsync(id) is { } transaccion
+    private static async Task<IResult> ObtenerPorId(Guid id, ITransaccionRepository repositorio) =>
+        await repositorio.ObtenerPorIdAsync(id) is { } transaccion
             ? Results.Ok(TransaccionResponse.Desde(transaccion))
             : Results.NotFound();
 
     private static async Task<IResult> ActualizarTransaccion(
-        Guid id, CrearTransaccionRequest request, GestorGastosDbContext db)
+        Guid id, CrearTransaccionRequest request, ITransaccionRepository repositorio, IUnitOfWork unitOfWork)
     {
-        var transaccion = await db.Transacciones.FindAsync(id);
+        var transaccion = await repositorio.ObtenerPorIdAsync(id);
         if (transaccion is null) return Results.NotFound();
 
         try
@@ -109,17 +90,18 @@ public static class TransaccionesEndpoints
             return ProblemaDeDominio(ex);
         }
 
-        await db.SaveChangesAsync();
+        await unitOfWork.GuardarCambiosAsync();
         return Results.NoContent();
     }
 
-    private static async Task<IResult> EliminarTransaccion(Guid id, GestorGastosDbContext db)
+    private static async Task<IResult> EliminarTransaccion(
+        Guid id, ITransaccionRepository repositorio, IUnitOfWork unitOfWork)
     {
-        var transaccion = await db.Transacciones.FindAsync(id);
+        var transaccion = await repositorio.ObtenerPorIdAsync(id);
         if (transaccion is null) return Results.NotFound();
 
-        db.Transacciones.Remove(transaccion);
-        await db.SaveChangesAsync();
+        repositorio.Eliminar(transaccion);
+        await unitOfWork.GuardarCambiosAsync();
         return Results.NoContent();
     }
 
