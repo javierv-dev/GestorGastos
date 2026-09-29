@@ -1,5 +1,6 @@
 using GestorGastos.Infrastructure.Persistence;
 using GestorGastos.Api.Dtos;
+using GestorGastos.Domain;
 using GestorGastos.Domain.Transacciones;
 using Microsoft.EntityFrameworkCore;
 
@@ -24,18 +25,16 @@ public static class TransaccionesEndpoints
 
     private static async Task<IResult> CrearTransaccion(CrearTransaccionRequest request, GestorGastosDbContext db)
     {
-        if (ValidarMonto(request.Monto) is { } errorMonto) return errorMonto;
-        if (ValidarTipo(request.Tipo) is { } errorTipo) return errorTipo;
-
-        var transaccion = new Transaccion
+        Transaccion transaccion;
+        try
         {
-            Id = Guid.NewGuid(),
-            Descripcion = request.Descripcion,
-            Monto = request.Monto,
-            Tipo = request.Tipo,
-            Categoria = request.Categoria ?? CategoriaTransaccion.Otros,
-            Fecha = request.Fecha
-        };
+            transaccion = Transaccion.Crear(
+                request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha);
+        }
+        catch (DomainException ex)
+        {
+            return ProblemaDeDominio(ex);
+        }
 
         db.Transacciones.Add(transaccion);
         await db.SaveChangesAsync();
@@ -97,17 +96,18 @@ public static class TransaccionesEndpoints
     private static async Task<IResult> ActualizarTransaccion(
         Guid id, CrearTransaccionRequest request, GestorGastosDbContext db)
     {
-        if (ValidarMonto(request.Monto) is { } errorMonto) return errorMonto;
-        if (ValidarTipo(request.Tipo) is { } errorTipo) return errorTipo;
-
         var transaccion = await db.Transacciones.FindAsync(id);
         if (transaccion is null) return Results.NotFound();
 
-        transaccion.Descripcion = request.Descripcion;
-        transaccion.Monto = request.Monto;
-        transaccion.Tipo = request.Tipo;
-        transaccion.Categoria = request.Categoria ?? CategoriaTransaccion.Otros;
-        transaccion.Fecha = request.Fecha;
+        try
+        {
+            transaccion.Actualizar(
+                request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha);
+        }
+        catch (DomainException ex)
+        {
+            return ProblemaDeDominio(ex);
+        }
 
         await db.SaveChangesAsync();
         return Results.NoContent();
@@ -123,21 +123,6 @@ public static class TransaccionesEndpoints
         return Results.NoContent();
     }
 
-    private static IResult? ValidarMonto(decimal monto) =>
-        monto <= 0
-            ? Results.ValidationProblem(new Dictionary<string, string[]>
-            {
-                ["Monto"] = ["El monto debe ser mayor a cero."]
-            })
-            : null;
-
-    private static IResult? ValidarTipo(TipoTransaccion tipo) =>
-        tipo switch
-        {
-            TipoTransaccion.Ingreso or TipoTransaccion.Egreso => null,
-            _ => Results.ValidationProblem(new Dictionary<string, string[]>
-            {
-                ["Tipo"] = ["El tipo debe ser Ingreso o Egreso."]
-            })
-        };
+    private static IResult ProblemaDeDominio(DomainException ex) =>
+        Results.ValidationProblem(new Dictionary<string, string[]> { [ex.Campo] = [ex.Message] });
 }
