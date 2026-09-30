@@ -9,7 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddApplication();
-builder.Services.AddInfrastructure();
+builder.Services.AddInfrastructure(builder.Configuration.GetConnectionString("Default") ?? "Data Source=gastos.db");
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
@@ -32,3 +32,6 @@ app.UseHttpsRedirection();
 app.MapTransaccionesEndpoints();
 
 app.Run();
+
+// Expone Program a las pruebas de integración (WebApplicationFactory<Program>).
+public partial class Program;

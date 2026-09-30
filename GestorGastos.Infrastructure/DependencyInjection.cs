@@ -8,9 +8,9 @@ namespace GestorGastos.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, string connectionString)
     {
-        services.AddDbContext<GestorGastosDbContext>(opt => opt.UseSqlite("Data Source=gastos.db"));
+        services.AddDbContext<GestorGastosDbContext>(opt => opt.UseSqlite(connectionString));
         services.AddScoped<ITransaccionRepository, TransaccionRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         return services;

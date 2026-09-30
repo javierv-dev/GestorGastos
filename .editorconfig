@@ -52,3 +52,8 @@ dotnet_naming_rule.campos_privados_con_guion_bajo.severity = warning
 [**/Migrations/*.cs]
 generated_code = true
 dotnet_analyzer_diagnostic.severity = none
+
+# Pruebas: nombres con guiones bajos (Metodo_Escenario_Resultado) y sin documentación XML.
+[GestorGastos.*.Tests/**.cs]
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1515.severity = none

@@ -1,6 +1,9 @@
 <Solution>
+  <Project Path="GestorGastos.Api.Tests/GestorGastos.Api.Tests.csproj" />
   <Project Path="GestorGastos.Api/GestorGastos.Api.csproj" />
+  <Project Path="GestorGastos.Application.Tests/GestorGastos.Application.Tests.csproj" />
   <Project Path="GestorGastos.Application/GestorGastos.Application.csproj" />
+  <Project Path="GestorGastos.Domain.Tests/GestorGastos.Domain.Tests.csproj" />
   <Project Path="GestorGastos.Domain/GestorGastos.Domain.csproj" />
   <Project Path="GestorGastos.Infrastructure/GestorGastos.Infrastructure.csproj" />
 </Solution>
