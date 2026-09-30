@@ -1,3 +1,5 @@
+using GestorGastos.Domain.Common;
+
 namespace GestorGastos.Domain.Transacciones;
 
 public enum TipoTransaccion
@@ -31,7 +33,7 @@ public class Transaccion
     public CategoriaTransaccion Categoria { get; private set; }
     public DateTime Fecha { get; private set; }
 
-    public static Transaccion Crear(
+    public static Result<Transaccion> Crear(
         string descripcion,
         decimal monto,
         TipoTransaccion tipo,
@@ -40,27 +42,29 @@ public class Transaccion
     )
     {
         var transaccion = new Transaccion { Id = Guid.NewGuid() };
-        transaccion.Aplicar(descripcion, monto, tipo, categoria, fecha);
-        return transaccion;
+        var resultado = transaccion.Aplicar(descripcion, monto, tipo, categoria, fecha);
+
+        return resultado.IsSuccess ? Result.Success(transaccion) : Result.Failure<Transaccion>(resultado.Error);
     }
 
-    public void Actualizar(string descripcion, decimal monto, TipoTransaccion tipo, CategoriaTransaccion? categoria, DateTime fecha) =>
+    public Result Actualizar(string descripcion, decimal monto, TipoTransaccion tipo, CategoriaTransaccion? categoria, DateTime fecha) =>
         Aplicar(descripcion, monto, tipo, categoria, fecha);
 
     // Valida todo antes de asignar: la entidad nunca queda a medio cambiar.
-    private void Aplicar(string descripcion, decimal monto, TipoTransaccion tipo, CategoriaTransaccion? categoria, DateTime fecha)
+    private Result Aplicar(string descripcion, decimal monto, TipoTransaccion tipo, CategoriaTransaccion? categoria, DateTime fecha)
     {
         if (monto <= 0)
-            throw new DomainException(nameof(Monto), "El monto debe ser mayor a cero.");
+            return Result.Failure(TransaccionErrors.MontoInvalido);
         if (!Enum.IsDefined(tipo))
-            throw new DomainException(nameof(Tipo), "El tipo debe ser Ingreso o Egreso.");
+            return Result.Failure(TransaccionErrors.TipoInvalido);
         if (string.IsNullOrWhiteSpace(descripcion))
-            throw new DomainException(nameof(Descripcion), "La descripción es obligatoria.");
+            return Result.Failure(TransaccionErrors.DescripcionObligatoria);
 
         Descripcion = descripcion;
         Monto = monto;
         Tipo = tipo;
         Categoria = categoria ?? CategoriaTransaccion.Otros;
         Fecha = fecha;
+        return Result.Success();
     }
 }

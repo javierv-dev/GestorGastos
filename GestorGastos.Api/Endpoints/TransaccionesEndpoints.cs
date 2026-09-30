@@ -1,4 +1,5 @@
 using GestorGastos.Api.Dtos;
+using GestorGastos.Api.Extensions;
 using GestorGastos.Application.Transacciones.Actualizar;
 using GestorGastos.Application.Transacciones.Crear;
 using GestorGastos.Application.Transacciones.Eliminar;
@@ -6,7 +7,6 @@ using GestorGastos.Application.Transacciones.Listar;
 using GestorGastos.Application.Transacciones.ObtenerPorId;
 using GestorGastos.Application.Transacciones.ObtenerResumen;
 using GestorGastos.Application.Transacciones.ObtenerSaldo;
-using GestorGastos.Domain;
 using GestorGastos.Domain.Transacciones;
 using MediatR;
 
@@ -29,21 +29,13 @@ public static class TransaccionesEndpoints
 
     private static async Task<IResult> CrearTransaccion(CrearTransaccionRequest request, ISender sender)
     {
-        try
-        {
-            var resultado = await sender.Send(
-                new CrearTransaccionCommand(request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha)
-            );
+        var resultado = await sender.Send(
+            new CrearTransaccionCommand(request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha)
+        );
 
-            return Results.Created(
-                $"/transacciones/{resultado.Transaccion.Id}",
-                TransaccionResponse.Desde(resultado.Transaccion, resultado.SaldoBajo)
-            );
-        }
-        catch (DomainException ex)
-        {
-            return ProblemaDeDominio(ex);
-        }
+        return resultado.Match(creada =>
+            Results.Created($"/transacciones/{creada.Transaccion.Id}", TransaccionResponse.Desde(creada.Transaccion, creada.SaldoBajo))
+        );
     }
 
     private static async Task<IResult> ListarTransacciones(
@@ -62,30 +54,24 @@ public static class TransaccionesEndpoints
 
     private static async Task<IResult> ObtenerResumen(ISender sender) => Results.Ok(await sender.Send(new ObtenerResumenQuery()));
 
-    private static async Task<IResult> ObtenerPorId(Guid id, ISender sender) =>
-        await sender.Send(new ObtenerTransaccionPorIdQuery(id)) is { } transaccion
-            ? Results.Ok(TransaccionResponse.Desde(transaccion))
-            : Results.NotFound();
+    private static async Task<IResult> ObtenerPorId(Guid id, ISender sender)
+    {
+        var resultado = await sender.Send(new ObtenerTransaccionPorIdQuery(id));
+        return resultado.Match(transaccion => Results.Ok(TransaccionResponse.Desde(transaccion)));
+    }
 
     private static async Task<IResult> ActualizarTransaccion(Guid id, CrearTransaccionRequest request, ISender sender)
     {
-        try
-        {
-            var encontrada = await sender.Send(
-                new ActualizarTransaccionCommand(id, request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha)
-            );
+        var resultado = await sender.Send(
+            new ActualizarTransaccionCommand(id, request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha)
+        );
 
-            return encontrada ? Results.NoContent() : Results.NotFound();
-        }
-        catch (DomainException ex)
-        {
-            return ProblemaDeDominio(ex);
-        }
+        return resultado.Match(Results.NoContent);
     }
 
-    private static async Task<IResult> EliminarTransaccion(Guid id, ISender sender) =>
-        await sender.Send(new EliminarTransaccionCommand(id)) ? Results.NoContent() : Results.NotFound();
-
-    private static IResult ProblemaDeDominio(DomainException ex) =>
-        Results.ValidationProblem(new Dictionary<string, string[]> { [ex.Campo] = [ex.Message] });
+    private static async Task<IResult> EliminarTransaccion(Guid id, ISender sender)
+    {
+        var resultado = await sender.Send(new EliminarTransaccionCommand(id));
+        return resultado.Match(Results.NoContent);
+    }
 }

@@ -1,10 +1,10 @@
 using GestorGastos.Application.Abstractions;
+using GestorGastos.Domain.Common;
 using GestorGastos.Domain.Transacciones;
 using MediatR;
 
 namespace GestorGastos.Application.Transacciones.Actualizar;
 
-// Devuelve false cuando la transacción no existe.
 public record ActualizarTransaccionCommand(
     Guid Id,
     string Descripcion,
@@ -12,20 +12,22 @@ public record ActualizarTransaccionCommand(
     TipoTransaccion Tipo,
     CategoriaTransaccion? Categoria,
     DateTime Fecha
-) : IRequest<bool>;
+) : IRequest<Result>;
 
 public class ActualizarTransaccionHandler(ITransaccionRepository repositorio, IUnitOfWork unitOfWork)
-    : IRequestHandler<ActualizarTransaccionCommand, bool>
+    : IRequestHandler<ActualizarTransaccionCommand, Result>
 {
-    public async Task<bool> Handle(ActualizarTransaccionCommand command, CancellationToken cancellationToken)
+    public async Task<Result> Handle(ActualizarTransaccionCommand command, CancellationToken cancellationToken)
     {
         var transaccion = await repositorio.ObtenerPorIdAsync(command.Id, cancellationToken);
         if (transaccion is null)
-            return false;
+            return Result.Failure(TransaccionErrors.NoEncontrada);
 
-        transaccion.Actualizar(command.Descripcion, command.Monto, command.Tipo, command.Categoria, command.Fecha);
+        var actualizada = transaccion.Actualizar(command.Descripcion, command.Monto, command.Tipo, command.Categoria, command.Fecha);
+        if (actualizada.IsFailure)
+            return actualizada;
 
         await unitOfWork.GuardarCambiosAsync(cancellationToken);
-        return true;
+        return Result.Success();
     }
 }

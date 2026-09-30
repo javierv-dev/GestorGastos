@@ -1,22 +1,23 @@
 using GestorGastos.Application.Abstractions;
+using GestorGastos.Domain.Common;
+using GestorGastos.Domain.Transacciones;
 using MediatR;
 
 namespace GestorGastos.Application.Transacciones.Eliminar;
 
-// Devuelve false cuando la transacción no existe.
-public record EliminarTransaccionCommand(Guid Id) : IRequest<bool>;
+public record EliminarTransaccionCommand(Guid Id) : IRequest<Result>;
 
 public class EliminarTransaccionHandler(ITransaccionRepository repositorio, IUnitOfWork unitOfWork)
-    : IRequestHandler<EliminarTransaccionCommand, bool>
+    : IRequestHandler<EliminarTransaccionCommand, Result>
 {
-    public async Task<bool> Handle(EliminarTransaccionCommand command, CancellationToken cancellationToken)
+    public async Task<Result> Handle(EliminarTransaccionCommand command, CancellationToken cancellationToken)
     {
         var transaccion = await repositorio.ObtenerPorIdAsync(command.Id, cancellationToken);
         if (transaccion is null)
-            return false;
+            return Result.Failure(TransaccionErrors.NoEncontrada);
 
         repositorio.Eliminar(transaccion);
         await unitOfWork.GuardarCambiosAsync(cancellationToken);
-        return true;
+        return Result.Success();
     }
 }

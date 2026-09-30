@@ -1,4 +1,5 @@
 using GestorGastos.Application.Abstractions;
+using GestorGastos.Domain.Common;
 using GestorGastos.Domain.Transacciones;
 using MediatR;
 
@@ -10,18 +11,22 @@ public record CrearTransaccionCommand(
     TipoTransaccion Tipo,
     CategoriaTransaccion? Categoria,
     DateTime Fecha
-) : IRequest<CrearTransaccionResultado>;
+) : IRequest<Result<CrearTransaccionResultado>>;
 
 public record CrearTransaccionResultado(Transaccion Transaccion, bool SaldoBajo);
 
 public class CrearTransaccionHandler(ITransaccionRepository repositorio, IUnitOfWork unitOfWork)
-    : IRequestHandler<CrearTransaccionCommand, CrearTransaccionResultado>
+    : IRequestHandler<CrearTransaccionCommand, Result<CrearTransaccionResultado>>
 {
     private const decimal UmbralSaldoBajo = 100m;
 
-    public async Task<CrearTransaccionResultado> Handle(CrearTransaccionCommand command, CancellationToken cancellationToken)
+    public async Task<Result<CrearTransaccionResultado>> Handle(CrearTransaccionCommand command, CancellationToken cancellationToken)
     {
-        var transaccion = Transaccion.Crear(command.Descripcion, command.Monto, command.Tipo, command.Categoria, command.Fecha);
+        var creada = Transaccion.Crear(command.Descripcion, command.Monto, command.Tipo, command.Categoria, command.Fecha);
+        if (creada.IsFailure)
+            return Result.Failure<CrearTransaccionResultado>(creada.Error);
+
+        var transaccion = creada.Value;
 
         repositorio.Agregar(transaccion);
         await unitOfWork.GuardarCambiosAsync(cancellationToken);
@@ -34,6 +39,6 @@ public class CrearTransaccionHandler(ITransaccionRepository repositorio, IUnitOf
             _ => false,
         };
 
-        return new CrearTransaccionResultado(transaccion, saldoBajo);
+        return Result.Success(new CrearTransaccionResultado(transaccion, saldoBajo));
     }
 }
