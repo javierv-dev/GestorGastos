@@ -10,6 +10,7 @@ public class ActualizarYEliminarHandlerTests
     private static readonly DateTime Fecha = new(2026, 9, 29);
 
     private readonly FakeTransaccionRepository _repositorio = new();
+    private readonly FakePresupuestoRepository _presupuestos = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
 
     private Transaccion Sembrar()
@@ -20,7 +21,7 @@ public class ActualizarYEliminarHandlerTests
     }
 
     private Task<GestorGastos.Domain.Common.Result> Actualizar(Guid id, decimal monto) =>
-        new ActualizarTransaccionHandler(_repositorio, _unitOfWork).Handle(
+        new ActualizarTransaccionHandler(_repositorio, ComprobadorFactory.Crear(_repositorio, _presupuestos), _unitOfWork).Handle(
             new ActualizarTransaccionCommand(id, "Nueva", monto, TipoTransaccion.Egreso, null, Fecha),
             CancellationToken.None
         );

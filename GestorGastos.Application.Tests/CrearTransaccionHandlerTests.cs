@@ -9,10 +9,12 @@ public class CrearTransaccionHandlerTests
     private static readonly DateTime Fecha = new(2026, 9, 29);
 
     private readonly FakeTransaccionRepository _repositorio = new();
+    private readonly FakePresupuestoRepository _presupuestos = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly CrearTransaccionHandler _handler;
 
-    public CrearTransaccionHandlerTests() => _handler = new CrearTransaccionHandler(_repositorio, _unitOfWork);
+    public CrearTransaccionHandlerTests() =>
+        _handler = new CrearTransaccionHandler(_repositorio, ComprobadorFactory.Crear(_repositorio, _presupuestos), _unitOfWork);
 
     private void SembrarIngreso(decimal monto) =>
         _repositorio.Items.Add(Transaccion.Crear("Semilla", monto, TipoTransaccion.Ingreso, null, Fecha).Value);

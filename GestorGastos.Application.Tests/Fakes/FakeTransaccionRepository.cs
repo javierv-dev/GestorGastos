@@ -33,6 +33,24 @@ public sealed class FakeTransaccionRepository : ITransaccionRepository
     public Task<decimal> ObtenerSaldoAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(Items.Sum(t => t.Tipo == TipoTransaccion.Ingreso ? t.Monto : -t.Monto));
 
+    public Task<decimal> ObtenerEgresosDelMesAsync(
+        CategoriaTransaccion categoria,
+        DateTime fecha,
+        Guid? excluirTransaccionId = null,
+        CancellationToken cancellationToken = default
+    ) =>
+        Task.FromResult(
+            Items
+                .Where(t =>
+                    t.Tipo == TipoTransaccion.Egreso
+                    && t.Categoria == categoria
+                    && t.Fecha.Year == fecha.Year
+                    && t.Fecha.Month == fecha.Month
+                    && t.Id != excluirTransaccionId
+                )
+                .Sum(t => t.Monto)
+        );
+
     public Task<IReadOnlyList<ResumenCategoria>> ObtenerResumenPorCategoriaAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(Resumen);
 

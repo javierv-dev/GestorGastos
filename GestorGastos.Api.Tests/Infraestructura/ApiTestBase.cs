@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -18,7 +19,7 @@ public abstract class ApiTestBase(ApiFactory factory) : IClassFixture<ApiFactory
 
     protected ApiFactory Factory { get; } = factory;
 
-    protected HttpClient Cliente { get; } = factory.CreateClient();
+    protected HttpClient Cliente { get; } = factory.CreateDefaultClient(new RevelarErroresDelServidorHandler());
 
     public async Task InitializeAsync()
     {
@@ -50,6 +51,15 @@ public abstract class ApiTestBase(ApiFactory factory) : IClassFixture<ApiFactory
             fecha,
         };
 
+    // Si el estado no es el esperado, el mensaje incluye el cuerpo de la respuesta: en desarrollo, un 500 trae la excepción.
+    protected static async Task EsperarEstado(HttpResponseMessage respuesta, HttpStatusCode esperado)
+    {
+        if (respuesta.StatusCode != esperado)
+            Assert.Fail(
+                $"Se esperaba {esperado} pero se recibió {respuesta.StatusCode}. Cuerpo: {await respuesta.Content.ReadAsStringAsync()}"
+            );
+    }
+
     protected Task<HttpResponseMessage> Enviar(object cuerpo) => Cliente.PostAsJsonAsync("/transacciones", cuerpo, Json);
 
     // Crea una transacción y falla la prueba si la API no responde 201.
@@ -62,7 +72,7 @@ public abstract class ApiTestBase(ApiFactory factory) : IClassFixture<ApiFactory
     )
     {
         var respuesta = await Enviar(Cuerpo(descripcion, monto, tipo, categoria, fecha));
-        Assert.Equal(System.Net.HttpStatusCode.Created, respuesta.StatusCode);
+        await EsperarEstado(respuesta, HttpStatusCode.Created);
 
         return (await respuesta.Content.ReadFromJsonAsync<TransaccionResponse>(Json))!;
     }

@@ -15,7 +15,7 @@ public class PresupuestosApiTests(ApiFactory factory) : ApiTestBase(factory)
     private async Task<PresupuestoResponse> CrearPresupuesto(string categoria = "Alimentacion", decimal limite = 400m)
     {
         var respuesta = await Enviar(categoria, limite);
-        Assert.Equal(HttpStatusCode.Created, respuesta.StatusCode);
+        await EsperarEstado(respuesta, HttpStatusCode.Created);
 
         return (await respuesta.Content.ReadFromJsonAsync<PresupuestoResponse>(Json))!;
     }
@@ -28,7 +28,7 @@ public class PresupuestosApiTests(ApiFactory factory) : ApiTestBase(factory)
     {
         var respuesta = await Enviar("Vivienda", 850m);
 
-        Assert.Equal(HttpStatusCode.Created, respuesta.StatusCode);
+        await EsperarEstado(respuesta, HttpStatusCode.Created);
         var creado = (await respuesta.Content.ReadFromJsonAsync<PresupuestoResponse>(Json))!;
         Assert.Equal($"/presupuestos/{creado.Id}", respuesta.Headers.Location?.OriginalString);
         Assert.Equal(CategoriaTransaccion.Vivienda, creado.Categoria);

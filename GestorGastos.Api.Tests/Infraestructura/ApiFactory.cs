@@ -33,7 +33,13 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         if (!disposing)
             return;
 
-        SqliteConnection.ClearAllPools();
+        // Solo se vacía el grupo de conexiones de ESTA base. ClearAllPools() destruiría también las conexiones de las
+        // bases de otras clases de prueba que corren en paralelo (ObjectDisposedException aleatorio en sus peticiones).
+        using (var conexion = new SqliteConnection($"Data Source={RutaBd}"))
+        {
+            SqliteConnection.ClearPool(conexion);
+        }
+
         foreach (var ruta in new[] { RutaBd, $"{RutaBd}-journal", $"{RutaBd}-wal", $"{RutaBd}-shm" })
         {
             if (File.Exists(ruta))
