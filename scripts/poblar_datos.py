@@ -2,13 +2,18 @@
 """Puebla la base de datos de desarrollo de GestorGastos y prueba todos los endpoints.
 
 Todo pasa por la API HTTP real, así que los datos respetan las reglas del dominio.
+Además de las transacciones crea presupuestos mensuales de ejemplo (el límite de cada categoría sale
+del gasto real: máximo mensual x 1,10 redondeado a la decena, mínimo 50; una categoría queda
+"ajustada" para poder demostrar el rechazo 409 de la regla del presupuesto) y prueba sus endpoints.
 Usa solo la biblioteca estándar de Python.
 
 Ejemplos de uso:
-    python scripts/poblar_datos.py                      # poblar y luego probar (aborta si ya hay datos)
-    python scripts/poblar_datos.py --dry-run            # muestra el plan de datos sin escribir nada
+    python scripts/poblar_datos.py                      # poblar, crear presupuestos y probar (aborta si ya hay datos)
+    python scripts/poblar_datos.py --dry-run            # muestra el plan de datos y de presupuestos sin escribir nada
+    python scripts/poblar_datos.py --solo-presupuestos  # añade presupuestos a una base ya poblada (no destructivo)
     python scripts/poblar_datos.py --solo-datos --agregar
-    python scripts/poblar_datos.py --solo-datos --limpiar --si
+    python scripts/poblar_datos.py --solo-datos --limpiar --si   # borra presupuestos y transacciones, y repuebla
+    python scripts/poblar_datos.py --solo-datos --sin-presupuestos
     python scripts/poblar_datos.py --solo-pruebas       # prueba los endpoints sin dejar residuos
     python scripts/poblar_datos.py --semilla 7 --url http://localhost:5007
 
@@ -20,6 +25,7 @@ Códigos de salida: 0 todo bien, 1 alguna prueba o creación falló,
 """
 
 import argparse
+import calendar
 import json
 import random
 import socket
@@ -29,7 +35,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from datetime import date, datetime, time, timedelta
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -47,6 +53,12 @@ CATEGORIES = [
 START_DATE = date(2026, 7, 1)
 END_DATE = date(2026, 9, 28)
 CENT = Decimal("0.01")
+BUDGET_FREE_CATEGORIES = ("Educacion", "Otros")  # categorías que quedan sin presupuesto a propósito
+BUDGET_FACTOR = Decimal("1.10")  # holgura sobre el máximo gasto mensual
+BUDGET_MIN = Decimal("50")
+TIGHT_MARGIN = Decimal("15.00")  # margen de la categoría "ajustada" (entre 10 y 20)
+HIGHLIGHT_MONTH = date(2026, 9, 1)  # mes que se muestra en la tabla y se usa en la demostración
+BUDGET_EXCEEDED_TITLE = "Presupuesto.Excedido"
 
 
 # ---------------------------------------------------------------- cliente HTTP
@@ -109,6 +121,12 @@ class Client:
             raise RuntimeError(f"GET /transacciones/saldo devolvió {r.status}")
         return Decimal(str(r.json["saldo"]))
 
+    def list_budgets(self):
+        r = self.call("GET", "/presupuestos")
+        if r.status != 200:
+            raise RuntimeError(f"GET /presupuestos devolvió {r.status}")
+        return r.json
+
     def summary(self):
         r = self.call("GET", "/transacciones/resumen")
         if r.status != 200:
@@ -126,6 +144,27 @@ def iso(moment):
 
 def fmt(amount):
     return f"{amount:,.2f}"
+
+
+def month_key(moment):
+    """Clave 'AAAA-MM' de una fecha, de un datetime o de un texto ISO."""
+    return str(moment)[:7]
+
+
+def month_bounds(first_day):
+    """Primer y último día del mes de una fecha, como texto ISO (para los filtros desde/hasta)."""
+    last = first_day.replace(day=calendar.monthrange(first_day.year, first_day.month)[1])
+    return first_day.replace(day=1).isoformat(), last.isoformat()
+
+
+def is_budget_rejection(resp):
+    """True si la respuesta es el 409 de la regla del presupuesto (title Presupuesto.Excedido)."""
+    if resp.status != 409:
+        return False
+    try:
+        return resp.json.get("title") == BUDGET_EXCEEDED_TITLE
+    except Exception:
+        return False
 
 
 # ------------------------------------------------------------ generador de datos
@@ -289,10 +328,150 @@ def print_plan(plan):
           f"({deliberate} momentos deliberados)")
 
 
+# ------------------------------------------------------------ presupuestos de ejemplo
+
+def expenses_of_transactions(transactions):
+    """Egresos como tuplas (categoría, mes 'AAAA-MM', monto) a partir de lo que devuelve la API."""
+    return [(x["categoria"], month_key(x["fecha"]), dec(x["monto"])) for x in transactions if x["tipo"] == "Egreso"]
+
+
+def expenses_of_plan(plan):
+    """Lo mismo, a partir del plan generado en memoria (para --dry-run)."""
+    return [(ev["categoria"], month_key(ev["fecha"].date()), ev["monto"]) for ev in plan if ev["tipo"] == "Egreso"]
+
+
+def round_up_limit(peak):
+    """Máximo gasto mensual x 1,10 redondeado hacia arriba a la decena, con mínimo 50."""
+    limit = (peak * BUDGET_FACTOR / 10).to_integral_value(rounding=ROUND_CEILING) * 10
+    return max(limit, BUDGET_MIN)
+
+
+def build_budget_rows(expenses, existing):
+    """Calcula los presupuestos a crear. Devuelve (filas, categorías omitidas por ya tener presupuesto).
+
+    Ningún mes histórico supera su límite, salvo la categoría "ajustada" (límite = gasto del mes
+    destacado + margen), que se elige entre las que tienen gasto en ese mes y prefiere una cuyo mes
+    destacado sea además su máximo, para que el resto del historial siga siendo coherente.
+    """
+    spend = {}
+    for category, month, amount in expenses:
+        months = spend.setdefault(category, {})
+        months[month] = months.get(month, Decimal("0")) + amount
+    highlight = month_key(HIGHLIGHT_MONTH)
+
+    rows, skipped = [], []
+    for category in CATEGORIES:
+        if category == "Salario" or category in BUDGET_FREE_CATEGORIES or category not in spend:
+            continue
+        if category in existing:
+            skipped.append(category)
+            continue
+        rows.append({"categoria": category, "limite": round_up_limit(max(spend[category].values())),
+                     "gastado": spend[category].get(highlight, Decimal("0")), "ajustada": False})
+
+    def preference(row):
+        is_peak = row["gastado"] == max(spend[row["categoria"]].values())
+        return (not is_peak, row["categoria"] != "Entretenimiento")
+
+    candidates = [r for r in rows if r["gastado"] > 0]
+    if candidates:
+        tight = min(candidates, key=preference)  # a igual preferencia gana el primero del enum
+        tight["limite"] = tight["gastado"] + TIGHT_MARGIN
+        tight["ajustada"] = True
+    return rows, skipped
+
+
+def print_budget_table(rows):
+    month = HIGHLIGHT_MONTH.strftime("%m/%Y")
+    print(f"  {'Categoría':<18}{'Límite':>12}{'Gastado ' + month:>18}{'% uso':>9}")
+    for row in rows:
+        usage = row["gastado"] / row["limite"] * 100
+        mark = "  <- ajustada" if row["ajustada"] else ""
+        print(f"  {row['categoria']:<18}{fmt(row['limite']):>12}{fmt(row['gastado']):>18}{usage:>8.1f}%{mark}")
+
+
+def create_budgets(client, rows):
+    """Crea cada presupuesto por la API, guarda el id en la fila y devuelve la cantidad de errores."""
+    errors = 0
+    for row in rows:
+        r = client.call("POST", "/presupuestos", {"categoria": row["categoria"], "limiteMensual": row["limite"]})
+        if r.status == 201 and r.headers.get("Location"):
+            row["id"] = r.json["id"]
+        else:
+            errors += 1
+            print(f"  ERROR al crear el presupuesto de {row['categoria']}: HTTP {r.status} {r.text[:200]}")
+    return errors
+
+
+def demo_rule(client, row):
+    """Intenta un egreso que excede el presupuesto ajustado y comprueba el 409. No deja residuos."""
+    category = row["categoria"]
+    first, last = month_bounds(HIGHLIGHT_MONTH)
+    spent = sum((dec(x["monto"]) for x in client.list_all(categoria=category, desde=first, hasta=last)
+                 if x["tipo"] == "Egreso"), Decimal("0"))
+    amount = row["limite"] - spent + Decimal("1.00")  # 1,00 por encima de lo disponible
+    count_before, balance_before = len(client.list_all()), client.balance()
+    body = {"descripcion": f"{TEST_PREFIX} Demostración de la regla del presupuesto", "monto": amount,
+            "tipo": "Egreso", "categoria": category, "fecha": f"{HIGHLIGHT_MONTH:%Y-%m}-15T12:00:00"}
+    r = client.call("POST", "/transacciones", body)
+    if r.status == 201:  # no debería ocurrir: se borra lo creado
+        client.call("DELETE", f"/transacciones/{r.json['id']}")
+    rejected = is_budget_rejection(r)
+    clean = len(client.list_all()) == count_before and client.balance() == balance_before
+    ok = rejected and clean
+    print(f"  Demostración de la regla: {'PASA' if ok else 'FALLA'} "
+          f"(egreso de {fmt(amount)} en {category}: HTTP {r.status}"
+          f"{', sin residuos' if clean else ', QUEDARON RESIDUOS'})")
+    if rejected:
+        print(f"    {r.json.get('detail')}")
+    return ok
+
+
+def seed_budgets(client):
+    """Crea los presupuestos de ejemplo a partir del gasto real de la API. Devuelve 0 o 1."""
+    expenses = expenses_of_transactions(client.list_all())
+    existing = {b["categoria"] for b in client.list_budgets()}
+    rows, skipped = build_budget_rows(expenses, existing)
+    print("Presupuestos de ejemplo (calculados con el gasto real de la API)")
+    if skipped:
+        print(f"  Omitidas por tener ya presupuesto: {', '.join(skipped)}")
+    if not rows:
+        print("  No hay presupuestos nuevos que crear.")
+        return 0
+    errors = create_budgets(client, rows)
+    print_budget_table(rows)
+    print(f"  Presupuestos creados: {len(rows) - errors} de {len(rows)}")
+    tight = next((r for r in rows if r["ajustada"] and "id" in r), None)
+    demo_ok = demo_rule(client, tight) if tight else True
+    return 1 if errors or not demo_ok else 0
+
+
+def print_budget_plan(expenses, existing=()):
+    """Muestra qué presupuestos se crearían (modo --dry-run)."""
+    rows, skipped = build_budget_rows(expenses, set(existing))
+    print()
+    print("Plan de presupuestos (límite = máximo gasto mensual x 1,10 a la decena, mínimo 50)")
+    if skipped:
+        print(f"  Se omitirían por tener ya presupuesto: {', '.join(skipped)}")
+    if rows:
+        print_budget_table(rows)
+    else:
+        print("  No hay presupuestos nuevos que crear.")
+    print(f"  Sin presupuesto a propósito: {', '.join(BUDGET_FREE_CATEGORIES)} (y Salario, que no es presupuestable)")
+
+
+def budgets_only(client):
+    """Modo --solo-presupuestos: no toca transacciones. Devuelve un código de salida."""
+    if not client.list_all():
+        print("ABORTADO: la API no tiene transacciones, no hay gasto real con el que calcular los límites.")
+        return 2
+    return seed_budgets(client)
+
+
 # ----------------------------------------------------------------------- poblar
 
-def confirm_cleanup(count, assume_yes):
-    print(f"ATENCIÓN: se van a borrar TODAS las transacciones existentes ({count}).")
+def confirm_cleanup(tx_count, budget_count, assume_yes):
+    print(f"ATENCIÓN: se van a borrar TODOS los presupuestos ({budget_count}) y TODAS las transacciones ({tx_count}).")
     if assume_yes:
         return True
     if not sys.stdin.isatty():
@@ -301,37 +480,56 @@ def confirm_cleanup(count, assume_yes):
     return input("Escribe 'si' para continuar: ").strip().lower() in ("si", "sí")
 
 
+def delete_all(client, path, items):
+    """Borra cada elemento por la API. Devuelve True si todos se borraron."""
+    for item in items:
+        r = client.call("DELETE", f"{path}/{item['id']}")
+        if r.status != 204:
+            print(f"Error al borrar {item['id']}: HTTP {r.status}")
+            return False
+    return True
+
+
 def populate(client, args):
     """Crea el plan en la API. Devuelve un código de salida (0, 1 o 2)."""
     plan = build_plan(args.semilla)
     existing = client.list_all()
-    if existing:
+    budgets = client.list_budgets()
+    if existing or budgets:
+        found = f"{len(existing)} transacciones y {len(budgets)} presupuestos"
         if args.limpiar:
-            if not confirm_cleanup(len(existing), args.si):
+            if not confirm_cleanup(len(existing), len(budgets), args.si):
                 return 2
-            for item in existing:
-                r = client.call("DELETE", f"/transacciones/{item['id']}")
-                if r.status != 204:
-                    print(f"Error al borrar {item['id']}: HTTP {r.status}")
-                    return 1
+            # Primero los presupuestos y luego las transacciones.
+            if not delete_all(client, "/presupuestos", budgets):
+                return 1
+            print(f"Se borraron {len(budgets)} presupuestos.")
+            if not delete_all(client, "/transacciones", existing):
+                return 1
             print(f"Se borraron {len(existing)} transacciones.")
         elif args.agregar:
-            print(f"La API ya tiene {len(existing)} transacciones; se agregan los datos de ejemplo a lo existente.")
+            print(f"La API ya tiene {found}; se agregan los datos de ejemplo a lo existente.")
         else:
-            print(f"ABORTADO: la API ya contiene {len(existing)} transacciones y no se tocó nada.")
+            print(f"ABORTADO: la API ya contiene {found} y no se tocó nada.")
             print("Opciones:")
-            print("  --agregar            añade los datos de ejemplo a lo existente")
-            print("  --limpiar --si       borra TODAS las transacciones y luego puebla")
-            print("  --solo-pruebas       solo prueba los endpoints sin poblar")
+            print("  --agregar              añade las transacciones de ejemplo a lo existente")
+            print("  --solo-presupuestos    añade solo los presupuestos que falten (no destructivo)")
+            print("  --limpiar --si         borra TODOS los presupuestos y transacciones, y luego puebla")
+            print("  --solo-pruebas         solo prueba los endpoints sin poblar")
             return 2
 
     running = client.balance()
-    created = errors = low_seen = mismatches = 0
+    created = errors = low_seen = mismatches = rejected = 0
     print(f"Creando {len(plan)} transacciones en orden cronológico...")
     for i, ev in enumerate(plan, 1):
         body = {"descripcion": ev["descripcion"], "monto": ev["monto"], "tipo": ev["tipo"],
                 "categoria": ev["categoria"], "fecha": iso(ev["fecha"])}
         r = client.call("POST", "/transacciones", body)
+        if is_budget_rejection(r):  # solo ocurre con --agregar sobre presupuestos ya creados
+            rejected += 1
+            if rejected <= 5:
+                print(f"  Rechazada por presupuesto en #{i} ({ev['descripcion']}): {r.json.get('detail')}")
+            continue
         if r.status != 201 or not r.headers.get("Location"):
             errors += 1
             print(f"  ERROR en #{i} ({ev['descripcion']}): HTTP {r.status} {r.text[:200]}")
@@ -351,6 +549,7 @@ def populate(client, args):
     print()
     print("Resumen de la población")
     print(f"  Transacciones creadas: {created} de {len(plan)}")
+    print(f"  Rechazadas por presupuesto: {rejected}")
     print(f"  Errores: {errors}")
     print(f"  Veces con saldoBajo=true: {low_seen} (discrepancias con lo esperado: {mismatches})")
     print(f"  Saldo final (API): {fmt(final_balance)} | esperado: {fmt(running)}")
@@ -360,7 +559,11 @@ def populate(client, args):
         ing, egr = dec(row["totalIngresos"]), dec(row["totalEgresos"])
         print(f"  {row['categoria']:<18}{fmt(ing):>12}{fmt(egr):>12}{fmt(ing - egr):>12}")
     bad = errors or mismatches or final_balance != running
-    return 1 if bad else 0
+    budget_failed = 0
+    if not args.sin_presupuestos:
+        print()
+        budget_failed = seed_budgets(client)
+    return 1 if bad or budget_failed else 0
 
 
 # ---------------------------------------------------------------------- pruebas
@@ -370,6 +573,7 @@ class Tester:
         self.client = client
         self.passed = self.failed = self.skipped = 0
         self.created_ids = []
+        self.budget_ids = []
 
     def check(self, name, ok, expected=None, received=None):
         if ok:
@@ -410,7 +614,38 @@ class Tester:
             return False
         return any(k.lower() == field.lower() for k in errors)
 
+    def post_budget(self, category, limit):
+        """Crea un presupuesto temporal y registra su id para limpiarlo al final."""
+        r = self.client.call("POST", "/presupuestos", {"categoria": category, "limiteMensual": limit})
+        if r.status == 201:
+            self.budget_ids.append(r.json["id"])
+        return r
+
+    def free_category(self):
+        """Primera categoría presupuestable que ahora mismo no tiene presupuesto (o None)."""
+        taken = {b["categoria"] for b in self.client.list_budgets()}
+        order = list(BUDGET_FREE_CATEGORIES) + [c for c in CATEGORIES if c not in BUDGET_FREE_CATEGORIES]
+        return next((c for c in order if c != "Salario" and c not in taken), None)
+
+    def quiet_months(self, category, count):
+        """Primeros `count` meses lejanos sin egresos de la categoría, para que el gasto existente no cuente."""
+        candidates = [date(2026, m, 1) for m in range(1, 7)] + [date(2025, m, 1) for m in range(12, 0, -1)]
+        found = []
+        for first in candidates:
+            since, until = month_bounds(first)
+            items = self.client.list_all(categoria=category, desde=since, hasta=until)
+            if not any(x["tipo"] == "Egreso" for x in items):
+                found.append(first)
+                if len(found) == count:
+                    break
+        return found
+
     def cleanup(self):
+        for budget_id in self.budget_ids:
+            r = self.client.call("DELETE", f"/presupuestos/{budget_id}")
+            if r.status not in (204, 404):
+                print(f"  Aviso: no se pudo borrar el presupuesto {budget_id} (HTTP {r.status})")
+        self.budget_ids.clear()
         for tx_id in self.created_ids:
             r = self.client.call("DELETE", f"/transacciones/{tx_id}")
             if r.status not in (204, 404):
@@ -422,10 +657,12 @@ def run_tests(client):
     t = Tester(client)
     base_ids = sorted(x["id"] for x in client.list_all())
     base_balance = client.balance()
-    print(f"Estado inicial: {len(base_ids)} transacciones, saldo {fmt(base_balance)}\n")
+    base_budgets = sorted((b["id"], b["categoria"], dec(b["limiteMensual"])) for b in client.list_budgets())
+    print(f"Estado inicial: {len(base_ids)} transacciones, {len(base_budgets)} presupuestos, "
+          f"saldo {fmt(base_balance)}\n")
 
     sections = [test_create, test_validation, test_low_balance, test_get_by_id, test_filters,
-                test_balance_and_summary, test_update, test_delete]
+                test_balance_and_summary, test_update, test_delete, test_budget_crud, test_budget_rule]
     try:
         for section in sections:
             print(f"--- {section.__name__} ---")
@@ -445,6 +682,9 @@ def run_tests(client):
             f"{len(base_ids)} transacciones", f"{len(after_ids)} transacciones")
     t.check("El saldo quedó exactamente como antes", after_balance == base_balance,
             fmt(base_balance), fmt(after_balance))
+    after_budgets = sorted((b["id"], b["categoria"], dec(b["limiteMensual"])) for b in client.list_budgets())
+    t.check("La lista de presupuestos quedó idéntica (mismos ids, categorías y límites)",
+            after_budgets == base_budgets, f"{len(base_budgets)} presupuestos", f"{len(after_budgets)} presupuestos")
     print(f"\nResumen: {t.passed} pasan, {t.failed} fallan, {t.skipped} omitidas")
     return 0 if t.failed == 0 else 1
 
@@ -633,30 +873,231 @@ def test_delete(t):
     t.check("DELETE de un id que nunca existió devuelve 404", never.status == 404, 404, never.status)
 
 
+def budget_body_ok(body, category, limit):
+    return (body is not None and body.get("categoria") == category and dec(body.get("limiteMensual", -1)) == limit
+            and bool(body.get("id")))
+
+
+def test_budget_crud(t):
+    c = t.client
+    category = t.free_category()
+    if category is None:
+        t.skip("Endpoints de presupuestos (CRUD)", "no hay ninguna categoría libre (sin presupuesto) con la que probar")
+        return
+    print(f"  (categoría libre elegida: {category})")
+    limit = Decimal("123.45")
+
+    r = t.post_budget(category, limit)
+    body = r.json if r.status == 201 else {}
+    budget_id = body.get("id")
+    t.check("POST presupuesto válido devuelve 201", r.status == 201, 201, r.status)
+    t.check("POST presupuesto válido incluye Location con el id",
+            budget_id is not None and r.headers.get("Location", "").endswith(f"/presupuestos/{budget_id}"),
+            f"/presupuestos/{budget_id}", r.headers.get("Location"))
+    t.check("POST presupuesto válido: cuerpo con id, categoria y limiteMensual", budget_body_ok(body, category, limit),
+            f"{category} / {limit}", body)
+    if budget_id is None:
+        t.skip("Resto de pruebas de presupuestos", "no se pudo crear el presupuesto base")
+        return
+
+    def count_for(cat):
+        return sum(1 for b in c.list_budgets() if b["categoria"] == cat)
+
+    r = c.call("POST", "/presupuestos", {"categoria": category, "limiteMensual": Decimal("999")})
+    problem = r.json if r.text else {}
+    t.check("POST duplicado devuelve 409", r.status == 409, 409, r.status)
+    t.check("POST duplicado: title Presupuesto.YaExiste", problem.get("title") == "Presupuesto.YaExiste",
+            "Presupuesto.YaExiste", problem.get("title"))
+    t.check("POST duplicado no crea otro presupuesto", count_for(category) == 1, 1, count_for(category))
+
+    for name, value in (("cero", Decimal("0")), ("negativo", Decimal("-10"))):
+        r = c.call("POST", "/presupuestos", {"categoria": category, "limiteMensual": value})
+        t.check(f"POST con límite {name} devuelve 400", r.status == 400, 400, r.status)
+        t.check(f"POST con límite {name} reporta el campo LimiteMensual", t.has_error_field(r, "LimiteMensual"),
+                "errors.LimiteMensual", r.text[:200])
+    r = c.call("POST", "/presupuestos", {"categoria": "Salario", "limiteMensual": Decimal("100")})
+    t.check("POST con categoría Salario devuelve 400 con el campo Categoria",
+            r.status == 400 and t.has_error_field(r, "Categoria"), "400 / Categoria", (r.status, r.text[:150]))
+    r = c.call("POST", "/presupuestos", {"categoria": "Inventada", "limiteMensual": Decimal("100")})
+    t.check("POST con categoría inexistente (texto) devuelve 400", r.status == 400, 400, r.status)
+
+    r = c.call("GET", "/presupuestos")
+    rows = r.json if r.status == 200 else []
+    t.check("GET lista devuelve 200 y contiene el presupuesto creado",
+            r.status == 200 and any(b["id"] == budget_id for b in rows), "200 y el creado", r.status)
+    order = [CATEGORIES.index(b["categoria"]) for b in rows if b["categoria"] in CATEGORIES]
+    t.check("GET lista: ordenada por categoría", order == sorted(order), "orden ascendente", order)
+
+    r = c.call("GET", f"/presupuestos/{budget_id}")
+    t.check("GET por id existente devuelve 200 con el mismo presupuesto",
+            r.status == 200 and budget_body_ok(r.json, category, limit), "200 y mismo registro", (r.status, r.text[:150]))
+    r = c.call("GET", f"/presupuestos/{uuid.uuid4()}")
+    t.check("GET por id inexistente devuelve 404", r.status == 404, 404, r.status)
+
+    r = c.call("PUT", f"/presupuestos/{budget_id}", {"limiteMensual": Decimal("200.00")})
+    t.check("PUT válido devuelve 204", r.status == 204, 204, r.status)
+    got = c.call("GET", f"/presupuestos/{budget_id}").json
+    t.check("PUT válido: el cambio es visible y la categoría no cambia",
+            dec(got["limiteMensual"]) == Decimal("200") and got["categoria"] == category, f"{category} / 200", got)
+    r = c.call("PUT", f"/presupuestos/{budget_id}", {"limiteMensual": Decimal("0")})
+    t.check("PUT con límite inválido devuelve 400 con el campo LimiteMensual",
+            r.status == 400 and t.has_error_field(r, "LimiteMensual"), "400 / LimiteMensual", (r.status, r.text[:150]))
+    got2 = c.call("GET", f"/presupuestos/{budget_id}").json
+    t.check("PUT inválido no modifica el presupuesto", got2 == got, got, got2)
+    r = c.call("PUT", f"/presupuestos/{uuid.uuid4()}", {"limiteMensual": Decimal("100")})
+    t.check("PUT de un presupuesto inexistente devuelve 404", r.status == 404, 404, r.status)
+
+    r = c.call("DELETE", f"/presupuestos/{budget_id}")
+    t.check("DELETE presupuesto devuelve 204", r.status == 204, 204, r.status)
+    r = c.call("GET", f"/presupuestos/{budget_id}")
+    t.check("GET posterior al DELETE devuelve 404", r.status == 404, 404, r.status)
+    r = c.call("DELETE", f"/presupuestos/{budget_id}")
+    t.check("DELETE repetido devuelve 404", r.status == 404, 404, r.status)
+
+
+def test_budget_rule(t):
+    c = t.client
+    category = t.free_category()
+    if category is None:
+        t.skip("Regla del presupuesto", "no hay ninguna categoría libre (sin presupuesto) con la que probar")
+        return
+    months = t.quiet_months(category, 2)
+    if len(months) < 2:
+        t.skip("Regla del presupuesto", f"no se encontraron dos meses lejanos sin egresos de {category}")
+        return
+    print(f"  (categoría libre elegida: {category}; meses de prueba: {months[0]:%Y-%m} y {months[1]:%Y-%m})")
+    here = datetime.combine(months[0].replace(day=15), time(12, 0, 0))
+    other = datetime.combine(months[1].replace(day=15), time(12, 0, 0))
+    since, until = month_bounds(months[0])
+    limit = Decimal("100.00")
+
+    budget = t.post_budget(category, limit)
+    if not t.check("Presupuesto temporal de 100 creado (201)", budget.status == 201, 201, budget.status):
+        return
+    budget_id = budget.json["id"]
+
+    def spend(amount, moment=here, kind="Egreso"):
+        return t.post("Regla del presupuesto", amount, kind, category, moment)
+
+    def month_count():
+        return len(c.list_all(categoria=category, desde=since, hasta=until))
+
+    r = spend(Decimal("60"))
+    t.check("Egreso dentro del límite (60 de 100) devuelve 201", r.status == 201, 201, r.status)
+    first_id = r.json["id"] if r.status == 201 else None
+
+    count_before, balance_before = month_count(), c.balance()
+    r = spend(Decimal("50"))
+    problem = r.json if r.text else {}
+    t.check("Egreso que excede (60 + 50 > 100) devuelve 409", r.status == 409, 409, r.status)
+    t.check("409: title Presupuesto.Excedido", problem.get("title") == BUDGET_EXCEEDED_TITLE,
+            BUDGET_EXCEEDED_TITLE, problem.get("title"))
+    expected_detail = (f"El egreso excede el presupuesto mensual de {category}: "
+                       "límite 100.00, ya gastado 60.00, disponible 40.00.")
+    t.check("409: detail con límite, gastado y disponible correctos", problem.get("detail") == expected_detail,
+            expected_detail, problem.get("detail"))
+    t.check("El egreso rechazado no se guardó (ni cambió el saldo)",
+            month_count() == count_before and c.balance() == balance_before,
+            f"{count_before} registros, saldo {fmt(balance_before)}", (month_count(), fmt(c.balance())))
+
+    r = spend(Decimal("40"))
+    t.check("Egreso que llega EXACTAMENTE al límite (60 + 40 = 100) devuelve 201", r.status == 201, 201, r.status)
+    exact_id = r.json["id"] if r.status == 201 else None
+    r = spend(Decimal("0.01"))
+    t.check("El siguiente egreso de 0,01 devuelve 409", r.status == 409, 409, r.status)
+
+    r = spend(Decimal("5000"), kind="Ingreso")
+    t.check("Un ingreso en la misma categoría devuelve 201 aunque supere el límite", r.status == 201, 201, r.status)
+    r = spend(Decimal("0.01"))
+    t.check("El ingreso no consumió ni liberó presupuesto (0,01 sigue dando 409)", r.status == 409, 409, r.status)
+
+    r = spend(Decimal("100"), other)
+    t.check("Egreso en OTRO mes devuelve 201 (el gasto de otros meses no cuenta)", r.status == 201, 201, r.status)
+
+    if exact_id is not None:
+        r = c.call("PUT", f"/transacciones/{exact_id}",
+                   {"descripcion": f"{TEST_PREFIX} Editada", "monto": Decimal("50"), "tipo": "Egreso",
+                    "categoria": category, "fecha": iso(here)})
+        t.check("PUT que haría exceder (60 + 50 > 100) devuelve 409 Presupuesto.Excedido",
+                is_budget_rejection(r), f"409 {BUDGET_EXCEEDED_TITLE}", (r.status, r.text[:150]))
+        got = t.get(exact_id).json
+        t.check("PUT rechazado no modifica la transacción",
+                dec(got["monto"]) == Decimal("40") and got["descripcion"] == f"{TEST_PREFIX} Regla del presupuesto",
+                "monto 40 y descripción original", got)
+
+        r = c.call("DELETE", f"/transacciones/{exact_id}")
+        t.check("Eliminar un egreso devuelve 204", r.status == 204, 204, r.status)
+        r = spend(Decimal("40"))
+        t.check("Eliminar un egreso liberó presupuesto (40 vuelve a entrar)", r.status == 201, 201, r.status)
+        if r.status == 201:
+            c.call("DELETE", f"/transacciones/{r.json['id']}")  # deja solo el egreso de 60
+
+    if first_id is not None:
+        r = c.call("PUT", f"/transacciones/{first_id}",
+                   {"descripcion": f"{TEST_PREFIX} Editada", "monto": Decimal("100"), "tipo": "Egreso",
+                    "categoria": category, "fecha": iso(here)})
+        t.check("PUT de un egreso propio hasta el límite (60 -> 100) devuelve 204 (no se cuenta a sí mismo)",
+                r.status == 204, 204, (r.status, r.text[:150]))
+        r = spend(Decimal("0.01"))
+        t.check("Con el egreso propio en 100, 0,01 más devuelve 409", r.status == 409, 409, r.status)
+
+    r = c.call("PUT", f"/presupuestos/{budget_id}", {"limiteMensual": Decimal("150")})
+    t.check("Subir el límite a 150 devuelve 204", r.status == 204, 204, r.status)
+    r = spend(Decimal("50"))
+    t.check("Subir el límite permite lo antes rechazado (50 más)", r.status == 201, 201, r.status)
+
+    r = c.call("DELETE", f"/presupuestos/{budget_id}")
+    t.check("Eliminar el presupuesto devuelve 204", r.status == 204, 204, r.status)
+    r = spend(Decimal("1000"))
+    t.check("Sin presupuesto ya no hay límite (egreso de 1000 devuelve 201)", r.status == 201, 201, r.status)
+
+
 # ------------------------------------------------------------------------- main
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Puebla y prueba la API de GestorGastos.")
+    p = argparse.ArgumentParser(
+        description="Puebla y prueba la API de GestorGastos (transacciones y presupuestos).",
+        epilog="ejemplos:\n"
+               "  python scripts/poblar_datos.py --dry-run\n"
+               "  python scripts/poblar_datos.py --solo-presupuestos\n"
+               "  python scripts/poblar_datos.py --solo-datos --limpiar --si\n"
+               "  python scripts/poblar_datos.py --solo-pruebas\n"
+               "códigos de salida: 0 todo bien, 1 alguna prueba o creación falló, 2 se abortó\n"
+               "por datos existentes o falta de confirmación, 3 la API no responde.",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--url", default=DEFAULT_URL, help=f"URL base de la API (por defecto {DEFAULT_URL})")
     mode = p.add_mutually_exclusive_group()
-    mode.add_argument("--solo-datos", action="store_true", help="solo poblar datos de ejemplo")
+    mode.add_argument("--solo-datos", action="store_true", help="solo poblar datos de ejemplo (y sus presupuestos)")
     mode.add_argument("--solo-pruebas", action="store_true", help="solo probar los endpoints")
+    mode.add_argument("--solo-presupuestos", action="store_true",
+                      help="no toca transacciones: crea los presupuestos de ejemplo a partir del gasto real, "
+                           "omitiendo las categorías que ya tienen uno (no destructivo)")
     safety = p.add_mutually_exclusive_group()
-    safety.add_argument("--agregar", action="store_true", help="añade los datos aunque la API ya tenga transacciones")
-    safety.add_argument("--limpiar", action="store_true", help="borra TODAS las transacciones antes de poblar")
+    safety.add_argument("--agregar", action="store_true",
+                        help="añade las transacciones aunque la API ya tenga datos (los presupuestos solo se crean si faltan)")
+    safety.add_argument("--limpiar", action="store_true",
+                        help="borra TODOS los presupuestos y luego TODAS las transacciones antes de poblar")
     p.add_argument("--si", action="store_true", help="confirma --limpiar sin preguntar")
+    p.add_argument("--sin-presupuestos", action="store_true", help="al poblar, no crea los presupuestos de ejemplo")
     p.add_argument("--semilla", type=int, default=2026, help="semilla del generador aleatorio (por defecto 2026)")
-    p.add_argument("--dry-run", action="store_true", help="muestra el plan de datos sin escribir en la API")
-    return p.parse_args()
+    p.add_argument("--dry-run", action="store_true",
+                   help="muestra el plan de datos y de presupuestos sin escribir en la API")
+    args = p.parse_args()
+    if args.solo_presupuestos and args.sin_presupuestos:
+        p.error("--solo-presupuestos y --sin-presupuestos se contradicen")
+    return args
 
 
 def main():
     args = parse_args()
-    if args.dry_run:
-        if args.solo_pruebas:
-            print("--dry-run solo aplica a la población de datos; no hay nada que mostrar con --solo-pruebas.")
-            return 0
-        print_plan(build_plan(args.semilla))
+    if args.dry_run and args.solo_pruebas:
+        print("--dry-run solo aplica a la población de datos; no hay nada que mostrar con --solo-pruebas.")
+        return 0
+    if args.dry_run and not args.solo_presupuestos:
+        plan = build_plan(args.semilla)
+        print_plan(plan)
+        if not args.sin_presupuestos:
+            print_budget_plan(expenses_of_plan(plan))
         return 0
 
     client = Client(args.url)
@@ -668,6 +1109,14 @@ def main():
         return 3
 
     try:
+        if args.solo_presupuestos:
+            if args.dry_run:  # solo lectura: calcula con lo que ya hay en la API
+                transactions = client.list_all()
+                print(f"La API tiene {len(transactions)} transacciones (solo lectura, no se crea nada).")
+                print_budget_plan(expenses_of_transactions(transactions),
+                                  {b["categoria"] for b in client.list_budgets()})
+                return 0
+            return budgets_only(client)
         code = 0
         if not args.solo_pruebas:
             code = populate(client, args)
