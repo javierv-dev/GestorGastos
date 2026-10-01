@@ -14,7 +14,12 @@ public class CrearTransaccionHandlerTests
     private readonly CrearTransaccionHandler _handler;
 
     public CrearTransaccionHandlerTests() =>
-        _handler = new CrearTransaccionHandler(_repositorio, ComprobadorFactory.Crear(_repositorio, _presupuestos), _unitOfWork);
+        _handler = new CrearTransaccionHandler(
+            _repositorio,
+            ComprobadorFactory.Crear(_repositorio, _presupuestos),
+            new PoliticaDeUmbralFijo(),
+            _unitOfWork
+        );
 
     private void SembrarIngreso(decimal monto) =>
         _repositorio.Items.Add(Transaccion.Crear("Semilla", monto, TipoTransaccion.Ingreso, null, Fecha).Value);

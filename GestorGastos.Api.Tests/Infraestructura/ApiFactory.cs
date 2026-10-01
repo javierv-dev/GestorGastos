@@ -9,12 +9,18 @@ using Microsoft.Extensions.Hosting;
 namespace GestorGastos.Api.Tests.Infraestructura;
 
 // Levanta la API real con una base SQLite propia en un archivo temporal, creada con las migraciones de verdad.
-public sealed class ApiFactory : WebApplicationFactory<Program>
+public class ApiFactory : WebApplicationFactory<Program>
 {
     public string RutaBd { get; } = Path.Combine(Path.GetTempPath(), $"gestorgastos-tests-{Guid.NewGuid():N}.db");
 
-    protected override void ConfigureWebHost(IWebHostBuilder builder) =>
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
         builder.UseSetting("ConnectionStrings:Default", $"Data Source={RutaBd}");
+        Ajustar(builder);
+    }
+
+    // Punto de extensión: una variante de la fábrica puede añadir su propia configuración (por ejemplo, otro umbral).
+    protected virtual void Ajustar(IWebHostBuilder builder) { }
 
     protected override IHost CreateHost(IHostBuilder builder)
     {

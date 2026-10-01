@@ -18,7 +18,7 @@ public class LimiteDePresupuestoHandlerTests
     private readonly FakeUnitOfWork _unitOfWork = new();
 
     private CrearTransaccionHandler HandlerCrear() =>
-        new(_transacciones, ComprobadorFactory.Crear(_transacciones, _presupuestos), _unitOfWork);
+        new(_transacciones, ComprobadorFactory.Crear(_transacciones, _presupuestos), new PoliticaDeUmbralFijo(), _unitOfWork);
 
     private ActualizarTransaccionHandler HandlerActualizar() =>
         new(_transacciones, ComprobadorFactory.Crear(_transacciones, _presupuestos), _unitOfWork);
