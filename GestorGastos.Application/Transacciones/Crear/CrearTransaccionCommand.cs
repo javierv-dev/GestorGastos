@@ -16,11 +16,13 @@ public record CrearTransaccionCommand(
 
 public record CrearTransaccionResultado(Transaccion Transaccion, bool SaldoBajo);
 
-public class CrearTransaccionHandler(ITransaccionRepository repositorio, ComprobadorDePresupuesto comprobador, IUnitOfWork unitOfWork)
-    : IRequestHandler<CrearTransaccionCommand, Result<CrearTransaccionResultado>>
+public class CrearTransaccionHandler(
+    ITransaccionRepository repositorio,
+    ComprobadorDePresupuesto comprobador,
+    IPoliticaDeSaldoBajo politicaSaldoBajo,
+    IUnitOfWork unitOfWork
+) : IRequestHandler<CrearTransaccionCommand, Result<CrearTransaccionResultado>>
 {
-    private const decimal UmbralSaldoBajo = 100m;
-
     public async Task<Result<CrearTransaccionResultado>> Handle(CrearTransaccionCommand command, CancellationToken cancellationToken)
     {
         var creada = Transaccion.Crear(command.Descripcion, command.Monto, command.Tipo, command.Categoria, command.Fecha);
@@ -39,11 +41,8 @@ public class CrearTransaccionHandler(ITransaccionRepository repositorio, Comprob
 
         var saldoActual = await repositorio.ObtenerSaldoAsync(cancellationToken);
 
-        var saldoBajo = transaccion switch
-        {
-            { Tipo: TipoTransaccion.Egreso } when saldoActual < UmbralSaldoBajo => true,
-            _ => false,
-        };
+        // La regla de qué es "saldo bajo" vive en la política inyectada, no aquí.
+        var saldoBajo = politicaSaldoBajo.EsSaldoBajo(transaccion, saldoActual);
 
         return Result.Success(new CrearTransaccionResultado(transaccion, saldoBajo));
     }

@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using GestorGastos.Api.Endpoints;
 using GestorGastos.Application;
+using GestorGastos.Domain.Transacciones;
 using GestorGastos.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,7 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
-builder.Services.AddApplication();
+builder.Services.AddApplication(builder.Configuration.GetValue("Negocio:UmbralSaldoBajo", PoliticaDeUmbralFijo.UmbralPorDefecto));
 builder.Services.AddInfrastructure(builder.Configuration.GetConnectionString("Default") ?? "Data Source=gastos.db");
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
