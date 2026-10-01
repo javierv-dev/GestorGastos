@@ -30,6 +30,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.MapTransaccionesEndpoints();
+app.MapPresupuestosEndpoints();
 
 app.Run();
 

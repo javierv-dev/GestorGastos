@@ -23,7 +23,9 @@ public abstract class ApiTestBase(ApiFactory factory) : IClassFixture<ApiFactory
     public async Task InitializeAsync()
     {
         using var scope = Factory.Services.CreateScope();
-        await scope.ServiceProvider.GetRequiredService<GestorGastosDbContext>().Transacciones.ExecuteDeleteAsync();
+        var db = scope.ServiceProvider.GetRequiredService<GestorGastosDbContext>();
+        await db.Transacciones.ExecuteDeleteAsync();
+        await db.Presupuestos.ExecuteDeleteAsync();
     }
 
     public Task DisposeAsync()
