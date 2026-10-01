@@ -42,6 +42,26 @@ public class TransaccionRepository(GestorGastosDbContext db) : ITransaccionRepos
             ))
             .ToListAsync(cancellationToken);
 
+    public Task<decimal> ObtenerEgresosDelMesAsync(
+        CategoriaTransaccion categoria,
+        DateTime fecha,
+        Guid? excluirTransaccionId = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var inicioDelMes = new DateTime(fecha.Year, fecha.Month, 1);
+        var inicioDelMesSiguiente = inicioDelMes.AddMonths(1);
+
+        var egresos = db.Transacciones.Where(t =>
+            t.Tipo == TipoTransaccion.Egreso && t.Categoria == categoria && t.Fecha >= inicioDelMes && t.Fecha < inicioDelMesSiguiente
+        );
+
+        if (excluirTransaccionId is { } id)
+            egresos = egresos.Where(t => t.Id != id);
+
+        return egresos.SumAsync(t => t.Monto, cancellationToken);
+    }
+
     public void Agregar(Transaccion transaccion) => db.Transacciones.Add(transaccion);
 
     public void Eliminar(Transaccion transaccion) => db.Transacciones.Remove(transaccion);

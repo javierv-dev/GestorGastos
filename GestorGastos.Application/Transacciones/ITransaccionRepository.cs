@@ -15,6 +15,14 @@ public interface ITransaccionRepository
 
     Task<decimal> ObtenerSaldoAsync(CancellationToken cancellationToken = default);
 
+    // Suma los egresos de la categoría en el mes calendario de la fecha dada, sin contar la transacción excluida.
+    Task<decimal> ObtenerEgresosDelMesAsync(
+        CategoriaTransaccion categoria,
+        DateTime fecha,
+        Guid? excluirTransaccionId = null,
+        CancellationToken cancellationToken = default
+    );
+
     Task<IReadOnlyList<ResumenCategoria>> ObtenerResumenPorCategoriaAsync(CancellationToken cancellationToken = default);
 
     void Agregar(Transaccion transaccion);

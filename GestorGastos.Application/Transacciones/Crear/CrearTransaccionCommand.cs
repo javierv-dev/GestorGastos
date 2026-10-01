@@ -1,4 +1,5 @@
 using GestorGastos.Application.Abstractions;
+using GestorGastos.Application.Presupuestos;
 using GestorGastos.Domain.Common;
 using GestorGastos.Domain.Transacciones;
 using MediatR;
@@ -15,7 +16,7 @@ public record CrearTransaccionCommand(
 
 public record CrearTransaccionResultado(Transaccion Transaccion, bool SaldoBajo);
 
-public class CrearTransaccionHandler(ITransaccionRepository repositorio, IUnitOfWork unitOfWork)
+public class CrearTransaccionHandler(ITransaccionRepository repositorio, ComprobadorDePresupuesto comprobador, IUnitOfWork unitOfWork)
     : IRequestHandler<CrearTransaccionCommand, Result<CrearTransaccionResultado>>
 {
     private const decimal UmbralSaldoBajo = 100m;
@@ -27,6 +28,11 @@ public class CrearTransaccionHandler(ITransaccionRepository repositorio, IUnitOf
             return Result.Failure<CrearTransaccionResultado>(creada.Error);
 
         var transaccion = creada.Value;
+
+        // Un egreso que excede el presupuesto del mes se rechaza (409) antes de guardar nada.
+        var presupuesto = await comprobador.ComprobarAsync(transaccion, excluirTransaccionId: null, cancellationToken);
+        if (presupuesto.IsFailure)
+            return Result.Failure<CrearTransaccionResultado>(presupuesto.Error);
 
         repositorio.Agregar(transaccion);
         await unitOfWork.GuardarCambiosAsync(cancellationToken);
