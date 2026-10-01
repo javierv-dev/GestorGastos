@@ -16,6 +16,7 @@ public class CrearTransaccionHandlerTests
     public CrearTransaccionHandlerTests() =>
         _handler = new CrearTransaccionHandler(
             _repositorio,
+            _repositorio,
             ComprobadorFactory.Crear(_repositorio, _presupuestos),
             new PoliticaDeUmbralFijo(),
             _unitOfWork

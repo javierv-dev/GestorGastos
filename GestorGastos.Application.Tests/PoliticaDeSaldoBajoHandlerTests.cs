@@ -19,10 +19,13 @@ public class PoliticaDeSaldoBajoHandlerTests
         decimal monto,
         TipoTransaccion tipo
     ) =>
-        new CrearTransaccionHandler(_transacciones, ComprobadorFactory.Crear(_transacciones, _presupuestos), politica, _unitOfWork).Handle(
-            new CrearTransaccionCommand("Prueba", monto, tipo, null, Fecha),
-            CancellationToken.None
-        );
+        new CrearTransaccionHandler(
+            _transacciones,
+            _transacciones,
+            ComprobadorFactory.Crear(_transacciones, _presupuestos),
+            politica,
+            _unitOfWork
+        ).Handle(new CrearTransaccionCommand("Prueba", monto, tipo, null, Fecha), CancellationToken.None);
 
     [Fact]
     public async Task ElHandler_UsaElVeredictoDeLaPolitica_AunqueContradigaAlUmbralPorDefecto()
