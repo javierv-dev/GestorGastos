@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Hook pre-commit: formatea con CSharpier los archivos de .NET que se van a commitear.
+#
+# Activación en un clon nuevo (los hooks no se versionan por defecto):
+#   git config core.hooksPath .githooks
+# Saltar el hook en un commit puntual:
+#   git commit --no-verify
+set -euo pipefail
+
+# Los hooks se ejecutan en la raíz del repositorio; se fija explícitamente por seguridad.
+cd "$(git rev-parse --show-toplevel)"
+
+# 1) Archivos en el índice (A, C, M, R) con extensiones de .NET. Se usa -z para soportar
+#    espacios y acentos (sin -z git escapa los nombres con comillas y octales).
+files=()
+while IFS= read -r -d '' f; do
+  case "$f" in
+    */Migrations/* | Migrations/*) continue ;; # código generado, también ignorado por .csharpierignore
+    *.cs | *.csproj | *.props | *.targets | *.slnx) files+=("$f") ;;
+  esac
+done < <(git diff --cached --name-only -z --diff-filter=ACMR)
+
+# Salida inmediata si no hay nada que formatear (commits sin C# no pagan el costo de dotnet).
+if [ "${#files[@]}" -eq 0 ]; then
+  exit 0
+fi
+
+# 2) Staging parcial: si el archivo tiene cambios sin preparar, formatearlo y volver a agregarlo
+#    metería esos cambios en el commit. Se aborta antes de tocar nada.
+unstaged=()
+while IFS= read -r -d '' f; do
+  unstaged+=("$f")
+done < <(git diff --name-only -z -- "${files[@]}")
+
+if [ "${#unstaged[@]}" -gt 0 ]; then
+  {
+    echo "pre-commit: se cancela el commit."
+    echo "Estos archivos tienen cambios preparados y también cambios sin preparar:"
+    for f in "${unstaged[@]}"; do echo "  - $f"; done
+    echo "Formatearlos y volver a agregarlos mezclaría los cambios no preparados dentro del commit."
+    echo "Opciones:"
+    echo "  1) Prepara el archivo completo:  git add -- <archivo>"
+    echo "  2) Guarda o revierte los cambios pendientes (por ejemplo con git stash) y vuelve a intentar."
+    echo "  3) Omite el hook:  git commit --no-verify"
+  } >&2
+  exit 1
+fi
+
+# 3) Formatear solo esos archivos. Si CSharpier no responde, se intenta restaurar la herramienta
+#    local una vez; nunca se deja pasar un commit sin formatear.
+if ! out=$(dotnet csharpier format "${files[@]}" 2>&1); then
+  echo "pre-commit: CSharpier no está disponible; se intenta 'dotnet tool restore'..." >&2
+  dotnet tool restore >/dev/null 2>&1 || true
+  if ! out=$(dotnet csharpier format "${files[@]}" 2>&1); then
+    {
+      echo "pre-commit: no se pudo ejecutar CSharpier, así que se cancela el commit."
+      echo "Para arreglarlo, ejecuta en la raíz del repositorio:  dotnet tool restore"
+      echo "(requiere el SDK de .NET y dotnet-tools.json). Si el error de arriba es de sintaxis, corrige ese archivo."
+      echo "Si necesitas commitear sin formatear:  git commit --no-verify"
+    } >&2
+    exit 1
+  fi
+fi
+
+# 4) Lo que difiere del índice tras formatear lo cambió CSharpier (se verificó que antes no había
+#    cambios sin preparar). Se vuelve a preparar solo eso.
+changed=()
+while IFS= read -r -d '' f; do
+  changed+=("$f")
+done < <(git diff --name-only -z -- "${files[@]}")
+
+if [ "${#changed[@]}" -gt 0 ]; then
+  git add -- "${changed[@]}"
+  echo "pre-commit: CSharpier reformateó ${#changed[@]} archivo(s) y se volvieron a preparar:"
+  for f in "${changed[@]}"; do echo "  - $f"; done
+fi
+exit 0
