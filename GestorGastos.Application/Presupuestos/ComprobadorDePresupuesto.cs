@@ -7,7 +7,7 @@ namespace GestorGastos.Application.Presupuestos;
 
 // Servicio de aplicación: orquesta. Busca los datos (presupuesto y gasto del mes) y se los entrega al
 // servicio de dominio, que es quien decide. Lo usan los handlers que crean o modifican egresos.
-public class ComprobadorDePresupuesto(ITransaccionRepository transacciones, IPresupuestoRepository presupuestos)
+public class ComprobadorDePresupuesto(ITransaccionConsultas transacciones, IPresupuestoRepository presupuestos)
 {
     public async Task<Result> ComprobarAsync(Transaccion transaccion, Guid? excluirTransaccionId, CancellationToken cancellationToken)
     {

@@ -6,7 +6,7 @@ namespace GestorGastos.Application.Transacciones.Listar;
 public record ListarTransaccionesQuery(DateTime? Desde, DateTime? Hasta, CategoriaTransaccion? Categoria)
     : IRequest<IReadOnlyList<Transaccion>>;
 
-public class ListarTransaccionesHandler(ITransaccionRepository repositorio)
+public class ListarTransaccionesHandler(ITransaccionConsultas repositorio)
     : IRequestHandler<ListarTransaccionesQuery, IReadOnlyList<Transaccion>>
 {
     public Task<IReadOnlyList<Transaccion>> Handle(ListarTransaccionesQuery query, CancellationToken cancellationToken) =>

@@ -18,6 +18,7 @@ public record CrearTransaccionResultado(Transaccion Transaccion, bool SaldoBajo)
 
 public class CrearTransaccionHandler(
     ITransaccionRepository repositorio,
+    ITransaccionConsultas consultas,
     ComprobadorDePresupuesto comprobador,
     IPoliticaDeSaldoBajo politicaSaldoBajo,
     IUnitOfWork unitOfWork
@@ -39,7 +40,7 @@ public class CrearTransaccionHandler(
         repositorio.Agregar(transaccion);
         await unitOfWork.GuardarCambiosAsync(cancellationToken);
 
-        var saldoActual = await repositorio.ObtenerSaldoAsync(cancellationToken);
+        var saldoActual = await consultas.ObtenerSaldoAsync(cancellationToken);
 
         // La regla de qué es "saldo bajo" vive en la política inyectada, no aquí.
         var saldoBajo = politicaSaldoBajo.EsSaldoBajo(transaccion, saldoActual);

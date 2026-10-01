@@ -4,7 +4,7 @@ namespace GestorGastos.Application.Transacciones.ObtenerResumen;
 
 public record ObtenerResumenQuery : IRequest<IReadOnlyList<ResumenCategoria>>;
 
-public class ObtenerResumenHandler(ITransaccionRepository repositorio)
+public class ObtenerResumenHandler(ITransaccionConsultas repositorio)
     : IRequestHandler<ObtenerResumenQuery, IReadOnlyList<ResumenCategoria>>
 {
     public Task<IReadOnlyList<ResumenCategoria>> Handle(ObtenerResumenQuery query, CancellationToken cancellationToken) =>

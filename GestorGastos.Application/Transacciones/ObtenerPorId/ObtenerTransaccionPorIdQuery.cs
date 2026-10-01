@@ -6,7 +6,7 @@ namespace GestorGastos.Application.Transacciones.ObtenerPorId;
 
 public record ObtenerTransaccionPorIdQuery(Guid Id) : IRequest<Result<Transaccion>>;
 
-public class ObtenerTransaccionPorIdHandler(ITransaccionRepository repositorio)
+public class ObtenerTransaccionPorIdHandler(ITransaccionConsultas repositorio)
     : IRequestHandler<ObtenerTransaccionPorIdQuery, Result<Transaccion>>
 {
     public async Task<Result<Transaccion>> Handle(ObtenerTransaccionPorIdQuery query, CancellationToken cancellationToken)

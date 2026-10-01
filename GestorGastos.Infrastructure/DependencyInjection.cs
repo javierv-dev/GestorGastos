@@ -13,6 +13,7 @@ public static class DependencyInjection
     {
         services.AddDbContext<GestorGastosDbContext>(opt => opt.UseSqlite(connectionString));
         services.AddScoped<ITransaccionRepository, TransaccionRepository>();
+        services.AddScoped<ITransaccionConsultas, TransaccionConsultas>();
         services.AddScoped<IPresupuestoRepository, PresupuestoRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         return services;
