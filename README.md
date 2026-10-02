@@ -32,7 +32,7 @@ Además de ser una API funcional, el proyecto es un **ejercicio de aprendizaje d
 | **Tipo** | API REST con minimal API de ASP.NET Core, documentada con OpenAPI y Swagger UI (solo en desarrollo). |
 | **Persistencia** | SQLite mediante Entity Framework Core, con migraciones. |
 | **Arquitectura** | Clean Architecture en cuatro proyectos, con CQRS sobre MediatR. |
-| **Pruebas** | 207 pruebas automáticas en tres proyectos: unitarias, de integración y de arquitectura. |
+| **Pruebas** | 208 pruebas automáticas en tres proyectos: unitarias, de integración y de arquitectura. |
 
 **Reglas que conviene tener presentes desde el principio**
 
@@ -342,7 +342,7 @@ Si compruebas algo con `--no-build`, compila antes. Ejecutar un binario viejo da
 
 ## Pruebas
 
-Hay **207 pruebas** repartidas en tres proyectos xUnit. Se ejecutan en unos segundos:
+Hay **208 pruebas** repartidas en tres proyectos xUnit. Se ejecutan en unos segundos:
 
 ```bash
 dotnet test                                                  # todo
@@ -354,7 +354,7 @@ dotnet test --filter "FullyQualifiedName~Presupuesto"        # por nombre
 |---|---|---|---|
 | `GestorGastos.Domain.Tests` | 78 | Unitarias, sin base de datos | Entidades (`Transaccion`, `Presupuesto`), `Result`, `ErrorNegocio`, `VerificadorDePresupuesto` y `PoliticaDeUmbralFijo`, con sus valores límite. |
 | `GestorGastos.Application.Tests` | 49 | Unitarias con dobles | Los handlers con repositorios y unidad de trabajo **falsos escritos a mano**. Verifican también lo que *no* debe pasar: que un fallo no guarde nada. |
-| `GestorGastos.Api.Tests` | 80 | Integración y arquitectura | La API real con una base SQLite temporal creada con las migraciones, más las reglas de dependencia entre capas. |
+| `GestorGastos.Api.Tests` | 81 | Integración y arquitectura | La API real con una base SQLite temporal creada con las migraciones, más las reglas de dependencia entre capas. |
 
 ### Cómo funcionan las pruebas de integración
 
@@ -364,6 +364,7 @@ Detalles útiles:
 
 - `ApiFactory` tiene el punto de extensión `Ajustar`, que permite probar la API con otra configuración (por ejemplo, otro umbral de saldo bajo).
 - `RevelarErroresDelServidorHandler` convierte cualquier respuesta `5xx` en una excepción **con el cuerpo del servidor**, que en desarrollo incluye la excepción original. Gracias a eso una prueba nunca vuelve a mostrar solo "InternalServerError".
+- `CancelacionApiTests` registra, con un `IPipelineBehavior` de solo pruebas, el token que recibe cada solicitud de MediatR y comprueba que los 12 endpoints pasan el `CancellationToken` de la petición HTTP (si se olvida uno, el token es `default` y no es cancelable).
 - Al liberar la fábrica solo se vacía el grupo de conexiones de **su propia** base. Vaciar todos los grupos destruía las conexiones de otras clases en paralelo y producía fallos aleatorios.
 
 ### Pruebas de arquitectura
@@ -451,7 +452,6 @@ python scripts/poblar_datos.py --solo-datos --limpiar --si     # borra todo y vu
 
 - Crear y actualizar una transacción repiten una secuencia parecida (validar, comprobar el presupuesto, guardar). Es poca duplicación y se dejó a propósito.
 - Las consultas devuelven la entidad `Transaccion` y la capa de API la convierte a su respuesta, en lugar de que `Application` tenga sus propios DTO de lectura.
-- Los endpoints todavía no pasan el `CancellationToken` de la petición HTTP a los handlers.
 - No hay **autenticación**, **paginación** ni manejo de **moneda** (los montos son números sin unidad).
 - SQLite sirve para desarrollo y aprendizaje; para uso real con concurrencia habría que cambiar de proveedor (el cambio queda aislado en `Infrastructure`).
 

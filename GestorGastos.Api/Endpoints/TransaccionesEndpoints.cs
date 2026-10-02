@@ -27,10 +27,15 @@ public static class TransaccionesEndpoints
         transacciones.MapDelete("/{id:guid}", EliminarTransaccion);
     }
 
-    private static async Task<IResult> CrearTransaccion(CrearTransaccionRequest request, ISender sender)
+    private static async Task<IResult> CrearTransaccion(
+        CrearTransaccionRequest request,
+        ISender sender,
+        CancellationToken cancellationToken
+    )
     {
         var resultado = await sender.Send(
-            new CrearTransaccionCommand(request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha)
+            new CrearTransaccionCommand(request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha),
+            cancellationToken
         );
 
         return resultado.Match(creada =>
@@ -42,36 +47,44 @@ public static class TransaccionesEndpoints
         DateTime? desde,
         DateTime? hasta,
         CategoriaTransaccion? categoria,
-        ISender sender
+        ISender sender,
+        CancellationToken cancellationToken
     )
     {
-        var transacciones = await sender.Send(new ListarTransaccionesQuery(desde, hasta, categoria));
+        var transacciones = await sender.Send(new ListarTransaccionesQuery(desde, hasta, categoria), cancellationToken);
         return Results.Ok(transacciones.Select(t => TransaccionResponse.Desde(t)));
     }
 
-    private static async Task<IResult> ObtenerSaldo(ISender sender) =>
-        Results.Ok(new { saldo = await sender.Send(new ObtenerSaldoQuery()) });
+    private static async Task<IResult> ObtenerSaldo(ISender sender, CancellationToken cancellationToken) =>
+        Results.Ok(new { saldo = await sender.Send(new ObtenerSaldoQuery(), cancellationToken) });
 
-    private static async Task<IResult> ObtenerResumen(ISender sender) => Results.Ok(await sender.Send(new ObtenerResumenQuery()));
+    private static async Task<IResult> ObtenerResumen(ISender sender, CancellationToken cancellationToken) =>
+        Results.Ok(await sender.Send(new ObtenerResumenQuery(), cancellationToken));
 
-    private static async Task<IResult> ObtenerPorId(Guid id, ISender sender)
+    private static async Task<IResult> ObtenerPorId(Guid id, ISender sender, CancellationToken cancellationToken)
     {
-        var resultado = await sender.Send(new ObtenerTransaccionPorIdQuery(id));
+        var resultado = await sender.Send(new ObtenerTransaccionPorIdQuery(id), cancellationToken);
         return resultado.Match(transaccion => Results.Ok(TransaccionResponse.Desde(transaccion)));
     }
 
-    private static async Task<IResult> ActualizarTransaccion(Guid id, CrearTransaccionRequest request, ISender sender)
+    private static async Task<IResult> ActualizarTransaccion(
+        Guid id,
+        CrearTransaccionRequest request,
+        ISender sender,
+        CancellationToken cancellationToken
+    )
     {
         var resultado = await sender.Send(
-            new ActualizarTransaccionCommand(id, request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha)
+            new ActualizarTransaccionCommand(id, request.Descripcion, request.Monto, request.Tipo, request.Categoria, request.Fecha),
+            cancellationToken
         );
 
         return resultado.Match(Results.NoContent);
     }
 
-    private static async Task<IResult> EliminarTransaccion(Guid id, ISender sender)
+    private static async Task<IResult> EliminarTransaccion(Guid id, ISender sender, CancellationToken cancellationToken)
     {
-        var resultado = await sender.Send(new EliminarTransaccionCommand(id));
+        var resultado = await sender.Send(new EliminarTransaccionCommand(id), cancellationToken);
         return resultado.Match(Results.NoContent);
     }
 }
