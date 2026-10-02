@@ -4,8 +4,8 @@ using GestorGastos.Domain.Transacciones;
 
 namespace GestorGastos.Application.Tests.Fakes;
 
-// Repositorio en memoria: registra lo que los handlers le piden sin tocar ninguna base de datos.
-public sealed class FakePresupuestoRepository : IPresupuestoRepository
+// Repositorio en memoria con los dos roles (escritura y consultas): registra lo que los handlers le piden sin tocar ninguna base de datos.
+public sealed class FakePresupuestoRepository : IPresupuestoRepository, IPresupuestoConsultas
 {
     public List<Presupuesto> Items { get; } = [];
 

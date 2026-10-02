@@ -1,5 +1,6 @@
 using System.Reflection;
 using GestorGastos.Application.Abstractions;
+using GestorGastos.Application.Presupuestos;
 using GestorGastos.Application.Transacciones;
 using GestorGastos.Domain.Transacciones;
 
@@ -102,5 +103,54 @@ public class ArquitecturaTests
             ["ListarAsync", "ObtenerEgresosDelMesAsync", "ObtenerPorIdAsync", "ObtenerResumenPorCategoriaAsync", "ObtenerSaldoAsync"],
             Metodos(typeof(ITransaccionConsultas))
         );
+    }
+
+    // Handlers públicos de Application.Presupuestos cuyo request termina en "Query".
+    private static List<Type> HandlersDeConsultaDePresupuestos() =>
+        Application
+            .GetExportedTypes()
+            .Where(t =>
+                t is { IsClass: true, IsAbstract: false }
+                && t.Namespace is not null
+                && t.Namespace.StartsWith("GestorGastos.Application.Presupuestos", StringComparison.Ordinal)
+                && t.GetInterfaces()
+                    .Any(i =>
+                        i.IsGenericType
+                        && i.GetGenericTypeDefinition().Name == "IRequestHandler`2"
+                        && i.GetGenericArguments()[0].Name.EndsWith("Query", StringComparison.Ordinal)
+                    )
+            )
+            .ToList();
+
+    [Fact]
+    public void HandlersDeConsultaDePresupuestos_ExistenParaQueLaReglaNoSeaVacua()
+    {
+        Assert.NotEmpty(HandlersDeConsultaDePresupuestos());
+    }
+
+    [Fact]
+    public void HandlersDeConsultaDePresupuestos_NoDependenDeInterfacesDeEscritura()
+    {
+        var prohibidos = new[] { typeof(IPresupuestoRepository), typeof(IUnitOfWork) };
+
+        var infractores = HandlersDeConsultaDePresupuestos()
+            .SelectMany(h =>
+                h.GetConstructors()
+                    .SelectMany(c => c.GetParameters())
+                    .Where(p => prohibidos.Contains(p.ParameterType))
+                    .Select(p => $"{h.Name}({p.ParameterType.Name})")
+            )
+            .ToList();
+
+        Assert.Empty(infractores);
+    }
+
+    [Fact]
+    public void InterfacesDePresupuestos_DeclaranExactamenteLosMetodosEsperados()
+    {
+        static string[] Metodos(Type t) => t.GetMethods().Select(m => m.Name).Order(StringComparer.Ordinal).ToArray();
+
+        Assert.Equal(["Agregar", "Eliminar", "ObtenerPorIdAsync"], Metodos(typeof(IPresupuestoRepository)));
+        Assert.Equal(["ListarAsync", "ObtenerPorCategoriaAsync", "ObtenerPorIdAsync"], Metodos(typeof(IPresupuestoConsultas)));
     }
 }

@@ -32,7 +32,7 @@ Además de ser una API funcional, el proyecto es un **ejercicio de aprendizaje d
 | **Tipo** | API REST con minimal API de ASP.NET Core, documentada con OpenAPI y Swagger UI (solo en desarrollo). |
 | **Persistencia** | SQLite mediante Entity Framework Core, con migraciones. |
 | **Arquitectura** | Clean Architecture en cuatro proyectos, con CQRS sobre MediatR. |
-| **Pruebas** | 204 pruebas automáticas en tres proyectos: unitarias, de integración y de arquitectura. |
+| **Pruebas** | 207 pruebas automáticas en tres proyectos: unitarias, de integración y de arquitectura. |
 
 **Reglas que conviene tener presentes desde el principio**
 
@@ -77,7 +77,7 @@ flowchart LR
 | Proyecto | Responsabilidad | Depende de |
 |---|---|---|
 | `GestorGastos.Domain` | Entidades (`Transaccion`, `Presupuesto`), reglas de negocio, `Result` y errores, servicio de dominio y políticas. **Sin ninguna dependencia** (ni siquiera paquetes). | nada |
-| `GestorGastos.Application` | Casos de uso (commands y queries con MediatR), contratos de acceso a datos (`ITransaccionRepository`, `ITransaccionConsultas`, `IPresupuestoRepository`, `IUnitOfWork`) y servicios de aplicación. | Domain |
+| `GestorGastos.Application` | Casos de uso (commands y queries con MediatR), contratos de acceso a datos (`ITransaccionRepository`, `ITransaccionConsultas`, `IPresupuestoRepository`, `IPresupuestoConsultas`, `IUnitOfWork`) y servicios de aplicación. | Domain |
 | `GestorGastos.Infrastructure` | Implementación de los contratos con EF Core y SQLite, `DbContext`, configuración de entidades y migraciones. | Application, Domain |
 | `GestorGastos.Api` | Raíz de composición: registra los servicios, define los endpoints, traduce `Result` a respuestas HTTP. **No contiene reglas de negocio.** | Application, Infrastructure |
 
@@ -125,7 +125,7 @@ sequenceDiagram
 | **Servicio de dominio** | `VerificadorDePresupuesto` | Una regla que involucra a dos entidades (`Presupuesto` y `Transaccion`). Es pura: recibe los datos y decide, sin consultar nada. |
 | **Servicio de aplicación** | `ComprobadorDePresupuesto` | Orquesta la parte con entrada y salida: busca el presupuesto y el gasto del mes y se los entrega al servicio de dominio. |
 | **Política / Strategy** | `IPoliticaDeSaldoBajo`, `PoliticaDeUmbralFijo` | La regla de "saldo bajo" se puede cambiar sin tocar el handler (principio abierto/cerrado). |
-| **Segregación de interfaces** | `ITransaccionRepository` (escritura) frente a `ITransaccionConsultas` (lectura) | Cada handler depende solo de los métodos que usa. Lo vigila una prueba de arquitectura. |
+| **Segregación de interfaces** | `ITransaccionRepository` y `IPresupuestoRepository` (escritura) frente a `ITransaccionConsultas` y `IPresupuestoConsultas` (lectura) | Cada handler depende solo de los métodos que usa. Lo vigila una prueba de arquitectura. |
 | **Configuración externa** | `Negocio:UmbralSaldoBajo` | El umbral llega desde `appsettings.json` o variables de entorno; un valor inválido impide arrancar. |
 | **Pruebas con dobles escritos a mano** | `Application.Tests/Fakes` | Repositorios y unidad de trabajo falsos en memoria; sin librerías de mocks. |
 
@@ -342,7 +342,7 @@ Si compruebas algo con `--no-build`, compila antes. Ejecutar un binario viejo da
 
 ## Pruebas
 
-Hay **204 pruebas** repartidas en tres proyectos xUnit. Se ejecutan en unos segundos:
+Hay **207 pruebas** repartidas en tres proyectos xUnit. Se ejecutan en unos segundos:
 
 ```bash
 dotnet test                                                  # todo
@@ -354,7 +354,7 @@ dotnet test --filter "FullyQualifiedName~Presupuesto"        # por nombre
 |---|---|---|---|
 | `GestorGastos.Domain.Tests` | 78 | Unitarias, sin base de datos | Entidades (`Transaccion`, `Presupuesto`), `Result`, `ErrorNegocio`, `VerificadorDePresupuesto` y `PoliticaDeUmbralFijo`, con sus valores límite. |
 | `GestorGastos.Application.Tests` | 49 | Unitarias con dobles | Los handlers con repositorios y unidad de trabajo **falsos escritos a mano**. Verifican también lo que *no* debe pasar: que un fallo no guarde nada. |
-| `GestorGastos.Api.Tests` | 77 | Integración y arquitectura | La API real con una base SQLite temporal creada con las migraciones, más las reglas de dependencia entre capas. |
+| `GestorGastos.Api.Tests` | 80 | Integración y arquitectura | La API real con una base SQLite temporal creada con las migraciones, más las reglas de dependencia entre capas. |
 
 ### Cómo funcionan las pruebas de integración
 
@@ -368,7 +368,7 @@ Detalles útiles:
 
 ### Pruebas de arquitectura
 
-`ArquitecturaTests` comprueba por reflexión que `Domain` no referencia ninguna otra capa ni EF Core ni MediatR, que `Application` no referencia `Infrastructure`, `Api` ni EF Core, que `Infrastructure` no referencia `Api`, que `Api` no usa EF Core directamente, y que los handlers de consulta de transacciones no dependen de las interfaces de escritura. También fija los métodos exactos de `ITransaccionRepository` y `ITransaccionConsultas`.
+`ArquitecturaTests` comprueba por reflexión que `Domain` no referencia ninguna otra capa ni EF Core ni MediatR, que `Application` no referencia `Infrastructure`, `Api` ni EF Core, que `Infrastructure` no referencia `Api`, que `Api` no usa EF Core directamente, y que los handlers de consulta de transacciones y de presupuestos no dependen de las interfaces de escritura. También fija los métodos exactos de `ITransaccionRepository`, `ITransaccionConsultas`, `IPresupuestoRepository` y `IPresupuestoConsultas`.
 
 ### ¿Y si las pruebas están mal?
 
@@ -449,7 +449,6 @@ python scripts/poblar_datos.py --solo-datos --limpiar --si     # borra todo y vu
 
 ### Deudas y límites conocidos
 
-- `IPresupuestoRepository` **no está dividido** en lectura y escritura como sí lo está el de transacciones, así que las dos features no son del todo coherentes.
 - Crear y actualizar una transacción repiten una secuencia parecida (validar, comprobar el presupuesto, guardar). Es poca duplicación y se dejó a propósito.
 - Las consultas devuelven la entidad `Transaccion` y la capa de API la convierte a su respuesta, en lugar de que `Application` tenga sus propios DTO de lectura.
 - Los endpoints todavía no pasan el `CancellationToken` de la petición HTTP a los handlers.
@@ -521,4 +520,4 @@ El proyecto creció en pasos, cada uno con un solo concepto y su propio commit (
 
 Entre medias se añadieron las pruebas automáticas, el formato con CSharpier, el script de datos de ejemplo y el hook de pre-commit.
 
-**Posibles siguientes pasos:** dividir también `IPresupuestoRepository`, aplicar las migraciones al arrancar en desarrollo, paginación en los listados, DTO de lectura propios de `Application`, y un proveedor de base de datos distinto de SQLite.
+**Posibles siguientes pasos:** aplicar las migraciones al arrancar en desarrollo, paginación en los listados, DTO de lectura propios de `Application`, y un proveedor de base de datos distinto de SQLite.

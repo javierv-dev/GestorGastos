@@ -6,7 +6,7 @@ namespace GestorGastos.Application.Presupuestos.ObtenerPorId;
 
 public record ObtenerPresupuestoPorIdQuery(Guid Id) : IRequest<Result<Presupuesto>>;
 
-public class ObtenerPresupuestoPorIdHandler(IPresupuestoRepository repositorio)
+public class ObtenerPresupuestoPorIdHandler(IPresupuestoConsultas repositorio)
     : IRequestHandler<ObtenerPresupuestoPorIdQuery, Result<Presupuesto>>
 {
     public async Task<Result<Presupuesto>> Handle(ObtenerPresupuestoPorIdQuery query, CancellationToken cancellationToken)

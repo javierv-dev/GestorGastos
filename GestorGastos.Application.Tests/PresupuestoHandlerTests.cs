@@ -22,7 +22,7 @@ public class PresupuestoHandlerTests
     }
 
     private Task<GestorGastos.Domain.Common.Result<Presupuesto>> Crear(CategoriaTransaccion categoria, decimal limite) =>
-        new CrearPresupuestoHandler(_repositorio, _unitOfWork).Handle(
+        new CrearPresupuestoHandler(_repositorio, _repositorio, _unitOfWork).Handle(
             new CrearPresupuestoCommand(categoria, limite),
             CancellationToken.None
         );
