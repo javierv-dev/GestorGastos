@@ -3,13 +3,13 @@ using GestorGastos.Domain.Transacciones;
 
 namespace GestorGastos.Application.Transacciones;
 
-// Rol de lectura: consultas de solo lectura que no modifican el estado ni lo siguen.
+// Rol de lectura: consultas de solo lectura que devuelven modelos de lectura (DTO), nunca entidades.
 public interface ITransaccionConsultas
 {
-    Task<Transaccion?> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<TransaccionDto?> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default);
 
     // Una página del listado, de la más reciente a la más antigua. Los filtros se aplican antes de contar y paginar.
-    Task<ResultadoPaginado<Transaccion>> ListarAsync(
+    Task<ResultadoPaginado<TransaccionDto>> ListarAsync(
         DateTime? desde,
         DateTime? hasta,
         CategoriaTransaccion? categoria,

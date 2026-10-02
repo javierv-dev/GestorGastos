@@ -17,14 +17,19 @@ public sealed class FakeTransaccionRepository : ITransaccionRepository, ITransac
 
     public IReadOnlyList<ResumenCategoria> Resumen { get; set; } = [];
 
+    // Rol de escritura: devuelve la entidad.
     public Task<Transaccion?> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         Task.FromResult(Items.FirstOrDefault(t => t.Id == id));
+
+    // Rol de lectura: devuelve el DTO. Misma firma de parámetros que el anterior, por eso se implementa de forma explícita.
+    Task<TransaccionDto?> ITransaccionConsultas.ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(Items.Where(t => t.Id == id).Select(TransaccionDto.Desde).FirstOrDefault());
 
     public (int Pagina, int TamanoPagina)? UltimaPaginacion { get; private set; }
 
     public int Consultas { get; private set; }
 
-    public Task<ResultadoPaginado<Transaccion>> ListarAsync(
+    public Task<ResultadoPaginado<TransaccionDto>> ListarAsync(
         DateTime? desde,
         DateTime? hasta,
         CategoriaTransaccion? categoria,
@@ -36,8 +41,8 @@ public sealed class FakeTransaccionRepository : ITransaccionRepository, ITransac
         Consultas++;
         UltimoFiltro = (desde, hasta, categoria);
         UltimaPaginacion = (pagina, tamanoPagina);
-        var items = Items.Skip((pagina - 1) * tamanoPagina).Take(tamanoPagina).ToList();
-        return Task.FromResult(new ResultadoPaginado<Transaccion>(items, pagina, tamanoPagina, Items.Count));
+        var items = Items.Skip((pagina - 1) * tamanoPagina).Take(tamanoPagina).Select(TransaccionDto.Desde).ToList();
+        return Task.FromResult(new ResultadoPaginado<TransaccionDto>(items, pagina, tamanoPagina, Items.Count));
     }
 
     public Task<decimal> ObtenerSaldoAsync(CancellationToken cancellationToken = default) =>

@@ -1,5 +1,6 @@
 using GestorGastos.Application.Common;
 using GestorGastos.Application.Tests.Fakes;
+using GestorGastos.Application.Transacciones;
 using GestorGastos.Application.Transacciones.Listar;
 using GestorGastos.Domain.Common;
 using GestorGastos.Domain.Transacciones;
@@ -12,7 +13,7 @@ public class PaginacionHandlerTests
 
     private readonly FakeTransaccionRepository _repositorio = new();
 
-    private Task<Result<ResultadoPaginado<Transaccion>>> Listar(int pagina, int tamanoPagina) =>
+    private Task<Result<ResultadoPaginado<TransaccionDto>>> Listar(int pagina, int tamanoPagina) =>
         new ListarTransaccionesHandler(_repositorio).Handle(
             new ListarTransaccionesQuery(null, null, null, pagina, tamanoPagina),
             CancellationToken.None

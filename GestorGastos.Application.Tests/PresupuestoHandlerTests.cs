@@ -1,3 +1,4 @@
+using GestorGastos.Application.Presupuestos;
 using GestorGastos.Application.Presupuestos.ActualizarLimite;
 using GestorGastos.Application.Presupuestos.Crear;
 using GestorGastos.Application.Presupuestos.Eliminar;
@@ -21,8 +22,8 @@ public class PresupuestoHandlerTests
         return presupuesto;
     }
 
-    private Task<GestorGastos.Domain.Common.Result<Presupuesto>> Crear(CategoriaTransaccion categoria, decimal limite) =>
-        new CrearPresupuestoHandler(_repositorio, _repositorio, _unitOfWork).Handle(
+    private Task<GestorGastos.Domain.Common.Result<PresupuestoDto>> Crear(CategoriaTransaccion categoria, decimal limite) =>
+        new CrearPresupuestoHandler(_repositorio, _unitOfWork).Handle(
             new CrearPresupuestoCommand(categoria, limite),
             CancellationToken.None
         );
@@ -33,7 +34,7 @@ public class PresupuestoHandlerTests
         var resultado = await Crear(CategoriaTransaccion.Salud, 150m);
 
         Assert.True(resultado.IsSuccess);
-        Assert.Same(resultado.Value, Assert.Single(_repositorio.Agregados));
+        Assert.Equal(PresupuestoDto.Desde(Assert.Single(_repositorio.Agregados)), resultado.Value);
         Assert.Equal(1, _unitOfWork.VecesGuardado);
     }
 
@@ -152,7 +153,7 @@ public class PresupuestoHandlerTests
             CancellationToken.None
         );
 
-        Assert.Same(presupuesto, resultado.Value);
+        Assert.Equal(PresupuestoDto.Desde(presupuesto), resultado.Value);
     }
 
     [Fact]

@@ -25,7 +25,7 @@ public class QueryHandlerTests
             CancellationToken.None
         );
 
-        Assert.Same(transaccion, resultado.Value);
+        Assert.Equal(TransaccionDto.Desde(transaccion), resultado.Value);
     }
 
     [Fact]

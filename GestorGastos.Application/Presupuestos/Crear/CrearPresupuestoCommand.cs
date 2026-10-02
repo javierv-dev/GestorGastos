@@ -6,24 +6,24 @@ using MediatR;
 
 namespace GestorGastos.Application.Presupuestos.Crear;
 
-public record CrearPresupuestoCommand(CategoriaTransaccion Categoria, decimal LimiteMensual) : IRequest<Result<Presupuesto>>;
+public record CrearPresupuestoCommand(CategoriaTransaccion Categoria, decimal LimiteMensual) : IRequest<Result<PresupuestoDto>>;
 
-public class CrearPresupuestoHandler(IPresupuestoRepository repositorio, IPresupuestoConsultas consultas, IUnitOfWork unitOfWork)
-    : IRequestHandler<CrearPresupuestoCommand, Result<Presupuesto>>
+public class CrearPresupuestoHandler(IPresupuestoRepository repositorio, IUnitOfWork unitOfWork)
+    : IRequestHandler<CrearPresupuestoCommand, Result<PresupuestoDto>>
 {
-    public async Task<Result<Presupuesto>> Handle(CrearPresupuestoCommand command, CancellationToken cancellationToken)
+    public async Task<Result<PresupuestoDto>> Handle(CrearPresupuestoCommand command, CancellationToken cancellationToken)
     {
         var creado = Presupuesto.Crear(command.Categoria, command.LimiteMensual);
         if (creado.IsFailure)
-            return creado;
+            return Result.Failure<PresupuestoDto>(creado.Error);
 
         // Regla que el dominio no puede saber solo: necesita mirar los presupuestos existentes.
-        if (await consultas.ObtenerPorCategoriaAsync(command.Categoria, cancellationToken) is not null)
-            return Result.Failure<Presupuesto>(PresupuestoErrors.YaExiste);
+        if (await repositorio.ObtenerPorCategoriaAsync(command.Categoria, cancellationToken) is not null)
+            return Result.Failure<PresupuestoDto>(PresupuestoErrors.YaExiste);
 
         repositorio.Agregar(creado.Value);
         await unitOfWork.GuardarCambiosAsync(cancellationToken);
 
-        return creado;
+        return Result.Success(PresupuestoDto.Desde(creado.Value));
     }
 }

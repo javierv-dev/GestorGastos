@@ -4,15 +4,15 @@ using MediatR;
 
 namespace GestorGastos.Application.Transacciones.ObtenerPorId;
 
-public record ObtenerTransaccionPorIdQuery(Guid Id) : IRequest<Result<Transaccion>>;
+public record ObtenerTransaccionPorIdQuery(Guid Id) : IRequest<Result<TransaccionDto>>;
 
 public class ObtenerTransaccionPorIdHandler(ITransaccionConsultas repositorio)
-    : IRequestHandler<ObtenerTransaccionPorIdQuery, Result<Transaccion>>
+    : IRequestHandler<ObtenerTransaccionPorIdQuery, Result<TransaccionDto>>
 {
-    public async Task<Result<Transaccion>> Handle(ObtenerTransaccionPorIdQuery query, CancellationToken cancellationToken)
+    public async Task<Result<TransaccionDto>> Handle(ObtenerTransaccionPorIdQuery query, CancellationToken cancellationToken)
     {
         var transaccion = await repositorio.ObtenerPorIdAsync(query.Id, cancellationToken);
 
-        return transaccion is null ? Result.Failure<Transaccion>(TransaccionErrors.NoEncontrada) : Result.Success(transaccion);
+        return transaccion is null ? Result.Failure<TransaccionDto>(TransaccionErrors.NoEncontrada) : Result.Success(transaccion);
     }
 }

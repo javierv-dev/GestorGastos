@@ -11,15 +11,15 @@ public record ListarTransaccionesQuery(
     CategoriaTransaccion? Categoria,
     int Pagina = Paginacion.PaginaInicial,
     int TamanoPagina = Paginacion.TamanoPorDefecto
-) : IRequest<Result<ResultadoPaginado<Transaccion>>>;
+) : IRequest<Result<ResultadoPaginado<TransaccionDto>>>;
 
 public class ListarTransaccionesHandler(ITransaccionConsultas repositorio)
-    : IRequestHandler<ListarTransaccionesQuery, Result<ResultadoPaginado<Transaccion>>>
+    : IRequestHandler<ListarTransaccionesQuery, Result<ResultadoPaginado<TransaccionDto>>>
 {
-    public async Task<Result<ResultadoPaginado<Transaccion>>> Handle(ListarTransaccionesQuery query, CancellationToken cancellationToken)
+    public async Task<Result<ResultadoPaginado<TransaccionDto>>> Handle(ListarTransaccionesQuery query, CancellationToken cancellationToken)
     {
         if (Paginacion.Validar(query.Pagina, query.TamanoPagina) is { } error)
-            return Result.Failure<ResultadoPaginado<Transaccion>>(error);
+            return Result.Failure<ResultadoPaginado<TransaccionDto>>(error);
 
         var pagina = await repositorio.ListarAsync(
             query.Desde,

@@ -14,7 +14,7 @@ public record CrearTransaccionCommand(
     DateTime Fecha
 ) : IRequest<Result<CrearTransaccionResultado>>;
 
-public record CrearTransaccionResultado(Transaccion Transaccion, bool SaldoBajo);
+public record CrearTransaccionResultado(TransaccionDto Transaccion, bool SaldoBajo);
 
 public class CrearTransaccionHandler(
     ITransaccionRepository repositorio,
@@ -45,6 +45,6 @@ public class CrearTransaccionHandler(
         // La regla de qué es "saldo bajo" vive en la política inyectada, no aquí.
         var saldoBajo = politicaSaldoBajo.EsSaldoBajo(transaccion, saldoActual);
 
-        return Result.Success(new CrearTransaccionResultado(transaccion, saldoBajo));
+        return Result.Success(new CrearTransaccionResultado(TransaccionDto.Desde(transaccion), saldoBajo));
     }
 }

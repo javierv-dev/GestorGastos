@@ -1,4 +1,5 @@
 using GestorGastos.Application.Tests.Fakes;
+using GestorGastos.Application.Transacciones;
 using GestorGastos.Application.Transacciones.Crear;
 using GestorGastos.Domain.Transacciones;
 
@@ -35,7 +36,7 @@ public class CrearTransaccionHandlerTests
 
         Assert.True(resultado.IsSuccess);
         Assert.Single(_repositorio.Agregadas);
-        Assert.Same(_repositorio.Agregadas[0], resultado.Value.Transaccion);
+        Assert.Equal(TransaccionDto.Desde(_repositorio.Agregadas[0]), resultado.Value.Transaccion);
         Assert.Equal(1, _unitOfWork.VecesGuardado);
     }
 

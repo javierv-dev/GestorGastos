@@ -1,7 +1,9 @@
+using GestorGastos.Application.Transacciones;
 using GestorGastos.Domain.Transacciones;
 
 namespace GestorGastos.Api.Dtos;
 
+// El contrato HTTP. Se mantiene aparte del DTO de Application: este añade SaldoBajo, que solo existe al crear.
 public record TransaccionResponse(
     Guid Id,
     string Descripcion,
@@ -12,7 +14,7 @@ public record TransaccionResponse(
     bool SaldoBajo = false
 )
 {
-    public static TransaccionResponse Desde(Transaccion transaccion, bool saldoBajo = false) =>
+    public static TransaccionResponse Desde(TransaccionDto transaccion, bool saldoBajo = false) =>
         new(
             transaccion.Id,
             transaccion.Descripcion,

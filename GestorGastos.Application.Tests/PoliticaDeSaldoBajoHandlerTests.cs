@@ -1,4 +1,5 @@
 using GestorGastos.Application.Tests.Fakes;
+using GestorGastos.Application.Transacciones;
 using GestorGastos.Application.Transacciones.Crear;
 using GestorGastos.Domain.Transacciones;
 
@@ -50,7 +51,7 @@ public class PoliticaDeSaldoBajoHandlerTests
         var resultado = await Crear(politica, 50m, TipoTransaccion.Egreso);
 
         Assert.Equal(1, politica.VecesConsultada);
-        Assert.Same(resultado.Value.Transaccion, politica.UltimaTransaccion);
+        Assert.Equal(TransaccionDto.Desde(politica.UltimaTransaccion!), resultado.Value.Transaccion);
         Assert.Equal(250m, politica.UltimoSaldo);
     }
 

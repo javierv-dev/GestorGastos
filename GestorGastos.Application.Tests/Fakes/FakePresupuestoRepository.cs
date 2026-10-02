@@ -13,14 +13,19 @@ public sealed class FakePresupuestoRepository : IPresupuestoRepository, IPresupu
 
     public List<Presupuesto> Eliminados { get; } = [];
 
+    // Rol de escritura: devuelve la entidad.
     public Task<Presupuesto?> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         Task.FromResult(Items.FirstOrDefault(p => p.Id == id));
+
+    // Rol de lectura: devuelve el DTO. Misma firma de parámetros que el anterior, por eso se implementa de forma explícita.
+    Task<PresupuestoDto?> IPresupuestoConsultas.ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(Items.Where(p => p.Id == id).Select(PresupuestoDto.Desde).FirstOrDefault());
 
     public Task<Presupuesto?> ObtenerPorCategoriaAsync(CategoriaTransaccion categoria, CancellationToken cancellationToken = default) =>
         Task.FromResult(Items.FirstOrDefault(p => p.Categoria == categoria));
 
-    public Task<IReadOnlyList<Presupuesto>> ListarAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<Presupuesto>>(Items.OrderBy(p => p.Categoria).ToList());
+    public Task<IReadOnlyList<PresupuestoDto>> ListarAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<PresupuestoDto>>(Items.OrderBy(p => p.Categoria).Select(PresupuestoDto.Desde).ToList());
 
     public void Agregar(Presupuesto presupuesto)
     {

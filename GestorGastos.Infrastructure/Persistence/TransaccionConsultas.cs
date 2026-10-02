@@ -7,10 +7,10 @@ namespace GestorGastos.Infrastructure.Persistence;
 
 public class TransaccionConsultas(GestorGastosDbContext db) : ITransaccionConsultas
 {
-    public async Task<Transaccion?> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default) =>
-        await db.Transacciones.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
+    public async Task<TransaccionDto?> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default) =>
+        await db.Transacciones.Where(t => t.Id == id).Select(TransaccionDto.Proyeccion).FirstOrDefaultAsync(cancellationToken);
 
-    public async Task<ResultadoPaginado<Transaccion>> ListarAsync(
+    public async Task<ResultadoPaginado<TransaccionDto>> ListarAsync(
         DateTime? desde,
         DateTime? hasta,
         CategoriaTransaccion? categoria,
@@ -19,7 +19,8 @@ public class TransaccionConsultas(GestorGastosDbContext db) : ITransaccionConsul
         CancellationToken cancellationToken = default
     )
     {
-        var query = db.Transacciones.AsNoTracking();
+        // Sin AsNoTracking: al proyectar a DTO, EF no sigue ninguna entidad.
+        IQueryable<Transaccion> query = db.Transacciones;
 
         if (desde is not null)
             query = query.Where(t => t.Fecha >= desde.Value.Date);
@@ -33,7 +34,7 @@ public class TransaccionConsultas(GestorGastosDbContext db) : ITransaccionConsul
         // En long para que una página enorme no desborde; si ya se pasó del final, no hace falta una segunda consulta.
         var saltar = (long)(pagina - 1) * tamanoPagina;
         if (saltar >= total)
-            return new ResultadoPaginado<Transaccion>([], pagina, tamanoPagina, total);
+            return new ResultadoPaginado<TransaccionDto>([], pagina, tamanoPagina, total);
 
         // Sin un orden total y determinista, paginar repite o pierde filas: la fecha empata, así que el Id desempata.
         var items = await query
@@ -41,9 +42,10 @@ public class TransaccionConsultas(GestorGastosDbContext db) : ITransaccionConsul
             .ThenBy(t => t.Id)
             .Skip((int)saltar)
             .Take(tamanoPagina)
+            .Select(TransaccionDto.Proyeccion)
             .ToListAsync(cancellationToken);
 
-        return new ResultadoPaginado<Transaccion>(items, pagina, tamanoPagina, total);
+        return new ResultadoPaginado<TransaccionDto>(items, pagina, tamanoPagina, total);
     }
 
     public Task<decimal> ObtenerSaldoAsync(CancellationToken cancellationToken = default) =>
