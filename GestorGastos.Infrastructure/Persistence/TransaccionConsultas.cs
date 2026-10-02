@@ -1,3 +1,4 @@
+using GestorGastos.Application.Common;
 using GestorGastos.Application.Transacciones;
 using GestorGastos.Domain.Transacciones;
 using Microsoft.EntityFrameworkCore;
@@ -9,10 +10,12 @@ public class TransaccionConsultas(GestorGastosDbContext db) : ITransaccionConsul
     public async Task<Transaccion?> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         await db.Transacciones.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
 
-    public async Task<IReadOnlyList<Transaccion>> ListarAsync(
+    public async Task<ResultadoPaginado<Transaccion>> ListarAsync(
         DateTime? desde,
         DateTime? hasta,
         CategoriaTransaccion? categoria,
+        int pagina,
+        int tamanoPagina,
         CancellationToken cancellationToken = default
     )
     {
@@ -25,7 +28,22 @@ public class TransaccionConsultas(GestorGastosDbContext db) : ITransaccionConsul
         if (categoria is not null)
             query = query.Where(t => t.Categoria == categoria);
 
-        return await query.ToListAsync(cancellationToken);
+        var total = await query.CountAsync(cancellationToken);
+
+        // En long para que una página enorme no desborde; si ya se pasó del final, no hace falta una segunda consulta.
+        var saltar = (long)(pagina - 1) * tamanoPagina;
+        if (saltar >= total)
+            return new ResultadoPaginado<Transaccion>([], pagina, tamanoPagina, total);
+
+        // Sin un orden total y determinista, paginar repite o pierde filas: la fecha empata, así que el Id desempata.
+        var items = await query
+            .OrderByDescending(t => t.Fecha)
+            .ThenBy(t => t.Id)
+            .Skip((int)saltar)
+            .Take(tamanoPagina)
+            .ToListAsync(cancellationToken);
+
+        return new ResultadoPaginado<Transaccion>(items, pagina, tamanoPagina, total);
     }
 
     public Task<decimal> ObtenerSaldoAsync(CancellationToken cancellationToken = default) =>

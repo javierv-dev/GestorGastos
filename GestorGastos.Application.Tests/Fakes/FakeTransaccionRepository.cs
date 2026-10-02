@@ -1,3 +1,4 @@
+using GestorGastos.Application.Common;
 using GestorGastos.Application.Transacciones;
 using GestorGastos.Domain.Transacciones;
 
@@ -19,15 +20,24 @@ public sealed class FakeTransaccionRepository : ITransaccionRepository, ITransac
     public Task<Transaccion?> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         Task.FromResult(Items.FirstOrDefault(t => t.Id == id));
 
-    public Task<IReadOnlyList<Transaccion>> ListarAsync(
+    public (int Pagina, int TamanoPagina)? UltimaPaginacion { get; private set; }
+
+    public int Consultas { get; private set; }
+
+    public Task<ResultadoPaginado<Transaccion>> ListarAsync(
         DateTime? desde,
         DateTime? hasta,
         CategoriaTransaccion? categoria,
+        int pagina,
+        int tamanoPagina,
         CancellationToken cancellationToken = default
     )
     {
+        Consultas++;
         UltimoFiltro = (desde, hasta, categoria);
-        return Task.FromResult<IReadOnlyList<Transaccion>>(Items.ToList());
+        UltimaPaginacion = (pagina, tamanoPagina);
+        var items = Items.Skip((pagina - 1) * tamanoPagina).Take(tamanoPagina).ToList();
+        return Task.FromResult(new ResultadoPaginado<Transaccion>(items, pagina, tamanoPagina, Items.Count));
     }
 
     public Task<decimal> ObtenerSaldoAsync(CancellationToken cancellationToken = default) =>

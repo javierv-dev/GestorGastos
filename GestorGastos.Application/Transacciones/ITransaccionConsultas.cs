@@ -1,3 +1,4 @@
+using GestorGastos.Application.Common;
 using GestorGastos.Domain.Transacciones;
 
 namespace GestorGastos.Application.Transacciones;
@@ -7,10 +8,13 @@ public interface ITransaccionConsultas
 {
     Task<Transaccion?> ObtenerPorIdAsync(Guid id, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<Transaccion>> ListarAsync(
+    // Una página del listado, de la más reciente a la más antigua. Los filtros se aplican antes de contar y paginar.
+    Task<ResultadoPaginado<Transaccion>> ListarAsync(
         DateTime? desde,
         DateTime? hasta,
         CategoriaTransaccion? categoria,
+        int pagina,
+        int tamanoPagina,
         CancellationToken cancellationToken = default
     );
 

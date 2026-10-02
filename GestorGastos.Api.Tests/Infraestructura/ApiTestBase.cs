@@ -77,10 +77,13 @@ public abstract class ApiTestBase(ApiFactory factory) : IClassFixture<ApiFactory
         return (await respuesta.Content.ReadFromJsonAsync<TransaccionResponse>(Json))!;
     }
 
-    protected async Task<List<TransaccionResponse>> Listar(string consulta = "")
+    // Los items de la primera página (20 por defecto): suficiente para las pruebas que no estudian la paginación.
+    protected async Task<List<TransaccionResponse>> Listar(string consulta = "") => [.. (await ListarPagina(consulta)).Items];
+
+    protected async Task<PaginaResponse<TransaccionResponse>> ListarPagina(string consulta = "")
     {
-        var lista = await Cliente.GetFromJsonAsync<List<TransaccionResponse>>($"/transacciones{consulta}", Json);
-        return lista!;
+        var pagina = await Cliente.GetFromJsonAsync<PaginaResponse<TransaccionResponse>>($"/transacciones{consulta}", Json);
+        return pagina!;
     }
 
     protected async Task<decimal> Saldo()

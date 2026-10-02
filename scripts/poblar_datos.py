@@ -110,10 +110,16 @@ class Client:
             raise ApiUnavailable(str(e)) from e
 
     def list_all(self, **query):
-        r = self.call("GET", "/transacciones", query=query or None)
-        if r.status != 200:
-            raise RuntimeError(f"GET /transacciones devolvió {r.status}")
-        return r.json
+        # El listado está paginado (máximo 100 por página): se recorren todas las páginas y se devuelven todos los elementos.
+        items, page = [], 1
+        while True:
+            r = self.call("GET", "/transacciones", query={**query, "pagina": page, "tamanoPagina": 100})
+            if r.status != 200:
+                raise RuntimeError(f"GET /transacciones devolvió {r.status}")
+            items.extend(r.json["items"])
+            if page >= r.json["totalPaginas"]:
+                return items
+            page += 1
 
     def balance(self):
         r = self.call("GET", "/transacciones/saldo")

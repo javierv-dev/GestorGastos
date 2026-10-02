@@ -1,5 +1,6 @@
 using GestorGastos.Api.Dtos;
 using GestorGastos.Api.Extensions;
+using GestorGastos.Application.Common;
 using GestorGastos.Application.Transacciones.Actualizar;
 using GestorGastos.Application.Transacciones.Crear;
 using GestorGastos.Application.Transacciones.Eliminar;
@@ -47,12 +48,24 @@ public static class TransaccionesEndpoints
         DateTime? desde,
         DateTime? hasta,
         CategoriaTransaccion? categoria,
+        int? pagina,
+        int? tamanoPagina,
         ISender sender,
         CancellationToken cancellationToken
     )
     {
-        var transacciones = await sender.Send(new ListarTransaccionesQuery(desde, hasta, categoria), cancellationToken);
-        return Results.Ok(transacciones.Select(t => TransaccionResponse.Desde(t)));
+        var resultado = await sender.Send(
+            new ListarTransaccionesQuery(
+                desde,
+                hasta,
+                categoria,
+                pagina ?? Paginacion.PaginaInicial,
+                tamanoPagina ?? Paginacion.TamanoPorDefecto
+            ),
+            cancellationToken
+        );
+
+        return resultado.Match(p => Results.Ok(PaginaResponse.Desde(p, t => TransaccionResponse.Desde(t))));
     }
 
     private static async Task<IResult> ObtenerSaldo(ISender sender, CancellationToken cancellationToken) =>

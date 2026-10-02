@@ -32,7 +32,7 @@ Además de ser una API funcional, el proyecto es un **ejercicio de aprendizaje d
 | **Tipo** | API REST con minimal API de ASP.NET Core, documentada con OpenAPI y Swagger UI (solo en desarrollo). |
 | **Persistencia** | SQLite mediante Entity Framework Core, con migraciones. |
 | **Arquitectura** | Clean Architecture en cuatro proyectos, con CQRS sobre MediatR. |
-| **Pruebas** | 208 pruebas automáticas en tres proyectos: unitarias, de integración y de arquitectura. |
+| **Pruebas** | 240 pruebas automáticas en tres proyectos: unitarias, de integración y de arquitectura. |
 
 **Reglas que conviene tener presentes desde el principio**
 
@@ -126,6 +126,7 @@ sequenceDiagram
 | **Servicio de aplicación** | `ComprobadorDePresupuesto` | Orquesta la parte con entrada y salida: busca el presupuesto y el gasto del mes y se los entrega al servicio de dominio. |
 | **Política / Strategy** | `IPoliticaDeSaldoBajo`, `PoliticaDeUmbralFijo` | La regla de "saldo bajo" se puede cambiar sin tocar el handler (principio abierto/cerrado). |
 | **Segregación de interfaces** | `ITransaccionRepository` y `IPresupuestoRepository` (escritura) frente a `ITransaccionConsultas` y `IPresupuestoConsultas` (lectura) | Cada handler depende solo de los métodos que usa. Lo vigila una prueba de arquitectura. |
+| **Paginación** | `Paginacion`, `ResultadoPaginado<T>`, `TransaccionConsultas.ListarAsync` | El listado devuelve una página con sus totales; el orden determinista y el tope de tamaño evitan resultados inconsistentes y consultas abusivas. |
 | **Configuración externa** | `Negocio:UmbralSaldoBajo` | El umbral llega desde `appsettings.json` o variables de entorno; un valor inválido impide arrancar. |
 | **Pruebas con dobles escritos a mano** | `Application.Tests/Fakes` | Repositorios y unidad de trabajo falsos en memoria; sin librerías de mocks. |
 
@@ -191,7 +192,7 @@ Con la API en marcha en desarrollo, Swagger UI está en `/swagger` y el document
 | Método y ruta | Descripción | Respuestas |
 |---|---|---|
 | `POST /transacciones` | Crea una transacción. | `201` con `Location` y el cuerpo (incluye `saldoBajo`), `400` validación, `409` presupuesto excedido |
-| `GET /transacciones` | Lista. Filtros opcionales: `desde`, `hasta` (día completo incluido) y `categoria`. | `200` |
+| `GET /transacciones` | Lista **paginada**, de la más reciente a la más antigua. Filtros opcionales: `desde`, `hasta` (día completo incluido) y `categoria`. Paginación: `pagina` (por defecto 1) y `tamanoPagina` (por defecto 20, máximo 100). Ver [Paginación](#paginación). | `200`, `400` paginación inválida |
 | `GET /transacciones/{id}` | Una transacción. | `200`, `404` |
 | `PUT /transacciones/{id}` | Reemplaza los datos. | `204`, `400`, `404`, `409` |
 | `DELETE /transacciones/{id}` | Elimina. | `204`, `404` |
@@ -225,6 +226,9 @@ curl -X POST http://localhost:5007/transacciones -H "Content-Type: application/j
 
 # Filtrar por categoría y rango de fechas
 curl "http://localhost:5007/transacciones?categoria=Salud&desde=2026-09-01&hasta=2026-09-30"
+
+# Segunda página, de 10 en 10
+curl "http://localhost:5007/transacciones?pagina=2&tamanoPagina=10"
 ```
 
 Respuesta de un `POST /transacciones` correcto:
@@ -240,6 +244,26 @@ Respuesta de un `POST /transacciones` correcto:
   "saldoBajo": false
 }
 ```
+
+### Paginación
+
+Solo `GET /transacciones` está paginado: es el único listado que puede crecer sin límite. Los presupuestos son como máximo uno por categoría (8 filas), así que `GET /presupuestos` sigue devolviendo un arreglo simple.
+
+```json
+{
+  "items": [ { "id": "4af29467-...", "descripcion": "Sueldo", "monto": 2500, "tipo": "Ingreso", "categoria": "Salario", "fecha": "2026-09-05T09:00:00", "saldoBajo": false } ],
+  "pagina": 1,
+  "tamanoPagina": 20,
+  "total": 116,
+  "totalPaginas": 6
+}
+```
+
+- **Orden:** fecha descendente y, si hay empate, por `Id`. Sin un orden total y determinista, paginar repite o pierde filas entre página y página.
+- **Filtros:** se aplican antes de contar y de paginar, de modo que `total` refleja el resultado filtrado.
+- **Fuera de rango:** pedir una página más allá del final responde `200` con `items` vacío y el `total` real (no es un error).
+- **Valores inválidos:** `pagina` menor a 1 o `tamanoPagina` fuera de 1 a 100 responden `400` indicando el campo (`Pagina` o `TamanoPagina`). Un valor que no es un número también responde `400`.
+- **Es un cambio de formato:** antes el listado era un arreglo; ahora es este sobre. El script de datos recorre todas las páginas por sí solo.
 
 ### Formato de los errores
 
@@ -262,7 +286,7 @@ Ejemplo de un `409` por presupuesto excedido:
 }
 ```
 
-Códigos de error del dominio: `Transaccion.MontoInvalido`, `Transaccion.TipoInvalido`, `Transaccion.DescripcionObligatoria`, `Transaccion.NoEncontrada`, `Presupuesto.LimiteInvalido`, `Presupuesto.CategoriaInvalida`, `Presupuesto.CategoriaNoPresupuestable`, `Presupuesto.NoEncontrado`, `Presupuesto.YaExiste` y `Presupuesto.Excedido`.
+Códigos de error del dominio: `Transaccion.MontoInvalido`, `Transaccion.TipoInvalido`, `Transaccion.DescripcionObligatoria`, `Transaccion.NoEncontrada`, `Presupuesto.LimiteInvalido`, `Presupuesto.CategoriaInvalida`, `Presupuesto.CategoriaNoPresupuestable`, `Presupuesto.NoEncontrado`, `Presupuesto.YaExiste`, `Presupuesto.Excedido`, `Paginacion.PaginaInvalida` y `Paginacion.TamanoPaginaInvalido`.
 
 ---
 
@@ -342,7 +366,7 @@ Si compruebas algo con `--no-build`, compila antes. Ejecutar un binario viejo da
 
 ## Pruebas
 
-Hay **208 pruebas** repartidas en tres proyectos xUnit. Se ejecutan en unos segundos:
+Hay **240 pruebas** repartidas en tres proyectos xUnit. Se ejecutan en unos segundos:
 
 ```bash
 dotnet test                                                  # todo
@@ -353,8 +377,8 @@ dotnet test --filter "FullyQualifiedName~Presupuesto"        # por nombre
 | Proyecto | Pruebas | Tipo | Qué cubre |
 |---|---|---|---|
 | `GestorGastos.Domain.Tests` | 78 | Unitarias, sin base de datos | Entidades (`Transaccion`, `Presupuesto`), `Result`, `ErrorNegocio`, `VerificadorDePresupuesto` y `PoliticaDeUmbralFijo`, con sus valores límite. |
-| `GestorGastos.Application.Tests` | 49 | Unitarias con dobles | Los handlers con repositorios y unidad de trabajo **falsos escritos a mano**. Verifican también lo que *no* debe pasar: que un fallo no guarde nada. |
-| `GestorGastos.Api.Tests` | 81 | Integración y arquitectura | La API real con una base SQLite temporal creada con las migraciones, más las reglas de dependencia entre capas. |
+| `GestorGastos.Application.Tests` | 64 | Unitarias con dobles | Los handlers con repositorios y unidad de trabajo **falsos escritos a mano**. Verifican también lo que *no* debe pasar: que un fallo no guarde nada. |
+| `GestorGastos.Api.Tests` | 98 | Integración y arquitectura | La API real con una base SQLite temporal creada con las migraciones, más las reglas de dependencia entre capas. |
 
 ### Cómo funcionan las pruebas de integración
 
@@ -446,13 +470,14 @@ python scripts/poblar_datos.py --solo-datos --limpiar --si     # borra todo y vu
 | `Salario` no es presupuestable | Es una fuente de ingresos, no un gasto. |
 | El verificador del presupuesto es **estático** | No tiene estado ni dependencias; inyectarlo solo agregaría ceremonia. |
 | El índice único de `Presupuestos` además de la comprobación del handler | La comprobación da un error claro; el índice es la red de seguridad frente a peticiones simultáneas. |
+| Paginación **por página y tamaño** (offset), solo en transacciones | Es lo más simple de entender y de usar, y permite saltar a una página. Su límite: en tablas enormes `OFFSET` se vuelve lento y, si se insertan filas mientras se navega, puede repetir o saltar alguna. La alternativa es la paginación por cursor (ver siguientes pasos). |
 | La API **no migra al arrancar** | Se prefirió un paso explícito (`dotnet ef database update`) para no esconder cambios de esquema. |
 
 ### Deudas y límites conocidos
 
 - Crear y actualizar una transacción repiten una secuencia parecida (validar, comprobar el presupuesto, guardar). Es poca duplicación y se dejó a propósito.
 - Las consultas devuelven la entidad `Transaccion` y la capa de API la convierte a su respuesta, en lugar de que `Application` tenga sus propios DTO de lectura.
-- No hay **autenticación**, **paginación** ni manejo de **moneda** (los montos son números sin unidad).
+- No hay **autenticación** ni manejo de **moneda** (los montos son números sin unidad).
 - SQLite sirve para desarrollo y aprendizaje; para uso real con concurrencia habría que cambiar de proveedor (el cambio queda aislado en `Infrastructure`).
 
 ---
@@ -479,6 +504,7 @@ GestorGastos/
 │
 ├── GestorGastos.Application/
 │   ├── Abstractions/             IUnitOfWork
+│   ├── Common/                   ResultadoPaginado, Paginacion (límites y errores)
 │   ├── Transacciones/            un caso de uso por carpeta + ITransaccionRepository e ITransaccionConsultas
 │   ├── Presupuestos/             un caso de uso por carpeta + IPresupuestoRepository y ComprobadorDePresupuesto
 │   └── DependencyInjection.cs
@@ -520,4 +546,4 @@ El proyecto creció en pasos, cada uno con un solo concepto y su propio commit (
 
 Entre medias se añadieron las pruebas automáticas, el formato con CSharpier, el script de datos de ejemplo y el hook de pre-commit.
 
-**Posibles siguientes pasos:** aplicar las migraciones al arrancar en desarrollo, paginación en los listados, DTO de lectura propios de `Application`, y un proveedor de base de datos distinto de SQLite.
+**Posibles siguientes pasos:** aplicar las migraciones al arrancar en desarrollo, paginación por cursor, DTO de lectura propios de `Application`, y un proveedor de base de datos distinto de SQLite.
